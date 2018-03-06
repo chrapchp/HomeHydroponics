@@ -13,7 +13,7 @@
  *  alarm limits saved in EEPRPOM
  *
  */
-//test
+
 #include <Time.h>
 #include <HardwareSerial.h>
 #include <TimeLib.h>
