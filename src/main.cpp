@@ -1,16 +1,15 @@
 #include <Arduino.h>
 
 /**
- *  @file    planttestNG.ino
+ *  @file   main.cpp
  *  @author  peter c
- *  @date    4/14/2017
- *  @version 0.1
+ *  @date    2018Mar6
+ *  @version 1.0.0
  *
  *
  *  @section DESCRIPTION
  *  Control an ebb and flow hydroponic setup. Data published via as a modbus
- * slave and setpoints,
- *  alarm limits saved in EEPRPOM
+ * slave and setpoints based on arduino code migrated to platformIO
  *
  */
 
@@ -229,16 +228,19 @@ DallasTemperature sensors(&oneWire);
 const float NUTRIENT_TANK_MIXTURE_MAX = NUTRIENT_TANK_HEIGHT -
                                         NUTRIENT_TANK_AIR_GAP;
 NewPing LT_002(15, 16, NUTRIENT_TANK_HEIGHT); // Water Level
-float   LT_002Raw = 0.0;                      // Water Level present value in cm
-                                              // from top,  0-> undefined
+// from top,  0-> undefined Water Level present value in cm
+float   LT_002Raw = 0.0;
 
 RunningMedian LT_002MedianFilter = RunningMedian(5);
 
 // Discete Outputs
 // DO 35,36 AC spares
 // DO DC 39,41,42,43 spares
-DA_DiscreteOutput DY_102 = DA_DiscreteOutput(31, LOW); // Seeding LED 120 VAC
-DA_DiscreteOutput DY_103 = DA_DiscreteOutput(32, LOW); // Growing Chamber LED
+//
+// Seeding LED 120 VAC
+DA_DiscreteOutput DY_102 = DA_DiscreteOutput(31, LOW);
+// Growing Chamber LED
+DA_DiscreteOutput DY_103 = DA_DiscreteOutput(32, LOW);
 
 
 // Circulation Pump -> 120V AC
@@ -317,6 +319,8 @@ TimeChangeRule usMST =
   "MST", First, dowSunday, Nov, 5, -420
 };
 
+
+// Mountain time zone
 Timezone usMT(usMDT, usMST);
 struct _AlarmEntry
 {
@@ -349,8 +353,8 @@ AlarmEntry onTemperatureCompensate; // atlas sensor temperature compensation
 
 
 /**
+*  forward declarations
  * .ino file converted to plantformIO main.c
- *  forward declare functions
  */
 time_t       alarmTimeToUTC(time_t localAlarmTime);
 time_t       alarmTimeToLocal(time_t utcAlarmTime);
