@@ -220,7 +220,7 @@ DallasTemperature sensors(&oneWire);
 // Analog Inputs
 //
 // NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE);
-#define NUTRIENT_TANK_HEIGHT 45    // hight of nutrient tank in cm
+#define NUTRIENT_TANK_HEIGHT 45    // height of nutrient tank in cm
 #define NUTRIENT_TANK_AIR_GAP 16.5 // space between sensor and max water level
                                    // in cm
 #define NUTRIENT_DEAD_BAND 5.0     // % change allowed between samples as sensor
