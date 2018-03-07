@@ -102,7 +102,7 @@ HardwareSerial *tracePort = &Serial;
 #define DISABLE_FT002_SENSOR_INTERRUPTS detachInterrupt(digitalPinToInterrupt( \
                                                           FT002_SENSOR_INTERUPT_PIN))
 // iterrupt pin,calculation period in seconds
-FlowMeter FT_002(FT002_SENSOR_INTERUPT_PIN, FLOW_CALC_PERIOD_SECONDS); 
+FlowMeter FT_002(FT002_SENSOR_INTERUPT_PIN, FLOW_CALC_PERIOD_SECONDS);
 
 #define FT003_SENSOR_INTERUPT_PIN 3
 #define ENABLE_FT003_SENSOR_INTERRUPTS attachInterrupt(digitalPinToInterrupt(        \
@@ -111,7 +111,7 @@ FlowMeter FT_002(FT002_SENSOR_INTERUPT_PIN, FLOW_CALC_PERIOD_SECONDS);
                                                        RISING)
 #define DISABLE_FT003_SENSOR_INTERRUPTS detachInterrupt(digitalPinToInterrupt( \
                                                           FT003_SENSOR_INTERUPT_PIN))
-
+ 
 
 // iterrupt pin,calculation period in seconds
 FlowMeter FT_003(FT003_SENSOR_INTERUPT_PIN, FLOW_CALC_PERIOD_SECONDS);
