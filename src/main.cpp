@@ -1428,17 +1428,17 @@ void refreshModbusRegisters()
 
 void setModbusTime()
 {
-  if (modbusRegisters[HW_QT_001] != 0)
+  if (modbusRegisters[HW_QT_001_SP] != 0)
   {
     unsigned long pctime;
-    blconvert.regsl[0] = modbusRegisters[HW_QT_001];
-    blconvert.regsl[1] = modbusRegisters[HW_QT_001 + 1];
+    blconvert.regsl[0] = modbusRegisters[HW_QT_001_SP];
+    blconvert.regsl[1] = modbusRegisters[HW_QT_001_SP + 1];
     pctime             = blconvert.val;
     RTC.set(pctime); // set the RTC and the system time to the received value
     setTime(pctime); // Sync Arduino clock to the time received on the Serial2
                      // port
-    modbusRegisters[HW_QT_001]     = 0;
-    modbusRegisters[HW_QT_001 + 1] = 0;
+    modbusRegisters[HW_QT_001_SP]     = 0;
+    modbusRegisters[HW_QT_001_SP + 1] = 0;
   }
 }
 
