@@ -111,7 +111,7 @@ FlowMeter FT_002(FT002_SENSOR_INTERUPT_PIN, FLOW_CALC_PERIOD_SECONDS);
                                                        RISING)
 #define DISABLE_FT003_SENSOR_INTERRUPTS detachInterrupt(digitalPinToInterrupt( \
                                                           FT003_SENSOR_INTERUPT_PIN))
- 
+
 
 // iterrupt pin,calculation period in seconds
 FlowMeter FT_003(FT003_SENSOR_INTERUPT_PIN, FLOW_CALC_PERIOD_SECONDS);
@@ -1161,9 +1161,9 @@ bool isTimeForLightsOn(time_t currentEpoch, time_t offEpoch, time_t onEpoch)
 
 void doLightControl(struct _lightControlEntry *aLightControlEntry)
 {
-  if (isTimeForLightsOn(alarmTimeToUTC(now()),
-                        alarmTimeToUTC(aLightControlEntry->offEpoch),
-                        alarmTimeToUTC(aLightControlEntry->onEpoch)))
+  if (isTimeForLightsOn(alarmTimeToLocal(now()),
+                        alarmTimeToLocal(aLightControlEntry->offEpoch),
+                        alarmTimeToLocal(aLightControlEntry->onEpoch)))
     aLightControlEntry->onLightsOn();
   else aLightControlEntry->onLightsOff();
 }
