@@ -9,7 +9,6 @@
 #define DA_ATALAS_H
 #include "DA_Atlas.h"
 #define PH_DEFAULT_I2C_ADDRESS 100
-
 class DA_AtlasPH : public DA_Atlas {
 public:
 
