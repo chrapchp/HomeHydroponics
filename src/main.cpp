@@ -31,7 +31,6 @@
 #include <RunningMedian.h>     // https://github.com/RobTillaart/Arduino/tree/master/libraries/RunningMedian
 
 #include <DA_Flowmeter.h>
-#include <DA_Analoginput.h>
 #include <DA_Discreteinput.h>
 #include <DA_DiscreteOutput.h>
 #include <DA_DiscreteOutputTmr.h>
@@ -102,7 +101,7 @@ HardwareSerial *tracePort = &Serial;
 #define DISABLE_FT002_SENSOR_INTERRUPTS detachInterrupt(digitalPinToInterrupt( \
                                                           FT002_SENSOR_INTERUPT_PIN))
 // iterrupt pin,calculation period in seconds
-FlowMeter FT_002(FT002_SENSOR_INTERUPT_PIN, FLOW_CALC_PERIOD_SECONDS);
+DA_FlowMeter FT_002(FT002_SENSOR_INTERUPT_PIN, FLOW_CALC_PERIOD_SECONDS);
 
 #define FT003_SENSOR_INTERUPT_PIN 3
 #define ENABLE_FT003_SENSOR_INTERRUPTS attachInterrupt(digitalPinToInterrupt(        \
@@ -114,7 +113,7 @@ FlowMeter FT_002(FT002_SENSOR_INTERUPT_PIN, FLOW_CALC_PERIOD_SECONDS);
 
 
 // iterrupt pin,calculation period in seconds
-FlowMeter FT_003(FT003_SENSOR_INTERUPT_PIN, FLOW_CALC_PERIOD_SECONDS);
+DA_FlowMeter FT_003(FT003_SENSOR_INTERUPT_PIN, FLOW_CALC_PERIOD_SECONDS);
 
 #define CO2_INTERRUPT_PIN 18
 #define ENABLE_CO2_SENSOR_RISING_INTERRUPTS attachInterrupt(digitalPinToInterrupt( \
@@ -345,6 +344,7 @@ AlarmEntry onRefreshAnalogs;        // sonar and 1-wire read refresh
 AlarmEntry onFlowCalc;              // flow calculations
 AlarmEntry onTemperatureCompensate; // atlas sensor temperature compensation
 
+unsigned int debugState=0;
 
 /**
 *  forward declarations
@@ -557,11 +557,20 @@ void loop()
 
   refreshDiscreteInputs();
   refreshDiscreteOutputs();
+  debugState = 3;
   Alarm.delay(ALARM_REFRESH_INTERVAL);
 
 
-  if (currentIOType == i2c_ph) AT_001.refresh();
-  else AT_002.refresh();
+  if (currentIOType == i2c_ph)
+  {
+      debugState = 4;
+    AT_001.refresh();
+  }
+  else
+  {
+      debugState = 5;
+    AT_002.refresh();
+  }
 
   // . AT_001.serialize(tracePort,true);
   // doReadInputs();
@@ -1092,22 +1101,34 @@ void onAtlasECSample(IO_TYPE type, float value)
 
 void refreshDiscreteInputs()
 {
+  debugState=10;
   LSHH_002.refresh();
+  debugState=11;
   HS_002.refresh();
+  debugState=12;
   HS_003A.refresh();
+  debugState=13;
   HS_003B.refresh();
+  debugState=14;
   HS_003C.refresh();
+  debugState=15;
   HS_001.refresh();
+  debugState=16;
   HS_001AB.refresh();
+  debugState=17;
 
   // HS_101AB.refresh();
   HS_102AB.refresh();
+  debugState=18;
   HS_103AB.refresh();
+  debugState=19;
 }
 
 void refreshDiscreteOutputs()
 {
+  debugState = 30;
   PY_001.refresh(); // on/off timer
+  debugState = 31;
   MY_101.refresh(); // on/off timer
 }
 
@@ -1125,16 +1146,27 @@ void refreshLCD()
 
 void doOnCalcFlowRate()
 {
+    debugState = 41;
   DISABLE_FT002_SENSOR_INTERRUPTS;
+      debugState = 42;
   FT_002.end();
+    debugState = 43;
   FT_002.begin();
+    debugState = 44;
   DISABLE_FT003_SENSOR_INTERRUPTS;
+    debugState = 45;
   FT_003.end();
+    debugState = 46;
   FT_003.begin();
-  refreshLCD();
+      debugState = 47;
+  //refreshLCD();
+      debugState = 48;
   AT_102MedianFilter.add(AT_102Raw);
+      debugState = 49;
   ENABLE_FT002_SENSOR_INTERRUPTS;
+      debugState = 50;
   ENABLE_FT003_SENSOR_INTERRUPTS;
+      debugState = 51;
 }
 
 bool isTimeForLightsOn(time_t currentEpoch, time_t offEpoch, time_t onEpoch)
@@ -1190,10 +1222,11 @@ void doOnTemperatureCompensate()
 void do_ONP_SPoll()
 {
   float tLevel;
-
+    debugState = 60;
   doLightControl(&growingChamberLights);
+  debugState = 61;
   doLightControl(&seedingAreaLights);
-
+debugState = 62;
 
   unsigned int distanceCM = LT_002.ping() / US_ROUNDTRIP_CM -
                             NUTRIENT_TANK_AIR_GAP;
@@ -1203,11 +1236,17 @@ void do_ONP_SPoll()
            NUTRIENT_TANK_MIXTURE_MAX; // NUTRIENT_TANK_MIXTURE_MAX;
   tLevel   *= 100.0;
   LT_002Raw = tLevel;
+  debugState = 63;
   LT_002MedianFilter.add(LT_002Raw);
+  debugState = 64;
   sensors.requestTemperatures();
+  debugState = 65;
   AT_101H = AT_101.readHumidity(); // allow 1/4 sec to read
+  debugState = 66;
   AT_101T = AT_101.readTemperature();
+  debugState = 67;
   TT_001T = sensors.getTempC(mixtureTemperatureAddress);
+  debugState = 68;
 
   if (isnan(AT_101H) || isnan(AT_101T))
   {
@@ -1218,6 +1257,7 @@ void do_ONP_SPoll()
   }
   else
   {
+    debugState = 69;
     AT_101HI = AT_101.computeHeatIndex(AT_101T, AT_101H, false);
   }
 

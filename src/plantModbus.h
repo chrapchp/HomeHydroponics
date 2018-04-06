@@ -23,6 +23,7 @@
                                                  // coils
 
 
+
 // #define HOLDING_REGISTER_READ_OFFSET 10		// start read holding
 // regisers
 // #define HOLDING_REGISTER_WRITE_OFFSET 30
