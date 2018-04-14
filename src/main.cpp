@@ -539,6 +539,8 @@ void setup()
   // humidity sensor
   AT_101.begin();
   ENABLE_FT002_SENSOR_INTERRUPTS;
+  FT_002.setMeterFactor(7.5);
+  FT_003.setMeterFactor(7.5);
   ENABLE_CO2_SENSOR_RISING_INTERRUPTS;
   lcd.clear();
 }
