@@ -975,13 +975,13 @@ void displayTimerStatuses(bool clearScreen)
   lcd << "MY-101:";
   lcd.setCursor(7, 1);
   sprintf(sprintfBuf, "%05u",
-          (unsigned int)(MY_101.getCurrentOnDuration() / 1000));
+          (unsigned int)(MY_101.getCurrentActiveDuration() / 1000));
   lcd << sprintfBuf;
 
   lcd.setCursor(13, 1);
   sprintf(sprintfBuf,
           "%05u",
-          (unsigned int)(MY_101.getCurrentOffDuration() / 1000));
+          (unsigned int)(MY_101.getCurrentInactiveDuration() / 1000));
   lcd << sprintfBuf;
 
   lcd.setCursor(0, 2);
@@ -989,13 +989,13 @@ void displayTimerStatuses(bool clearScreen)
 
   lcd.setCursor(7, 2);
   sprintf(sprintfBuf, "%05u",
-          (unsigned int)(PY_001.getCurrentOnDuration() / 1000));
+          (unsigned int)(PY_001.getCurrentActiveDuration() / 1000));
   lcd << sprintfBuf;
 
   lcd.setCursor(13, 2);
   sprintf(sprintfBuf,
           "%05u",
-          (unsigned int)(PY_001.getCurrentOffDuration() / 1000));
+          (unsigned int)(PY_001.getCurrentInactiveDuration() / 1000));
   lcd << sprintfBuf;
 }
 
@@ -1428,10 +1428,10 @@ void refreshModbusRegisters()
   modbusRegisters[HR_DY_103_OFT_CV]     = blconvert.regsl[0];
   modbusRegisters[HR_DY_103_OFT_CV + 1] = blconvert.regsl[1];
 
-  modbusRegisters[HR_MY_101_ONP_CV] = MY_101.getCurrentOnDuration() / 1000;
-  modbusRegisters[HR_MY_101_OFP_CV] = MY_101.getCurrentOffDuration() / 1000;
-  modbusRegisters[HR_PY_001_ONP_CV] = PY_001.getCurrentOnDuration() / 1000;
-  modbusRegisters[HR_PY_001_OFP_CV] = PY_001.getCurrentOffDuration() / 1000;
+  modbusRegisters[HR_MY_101_ONP_CV] = MY_101.getCurrentActiveDuration() / 1000;
+  modbusRegisters[HR_MY_101_OFP_CV] = MY_101.getCurrentInactiveDuration() / 1000;
+  modbusRegisters[HR_PY_001_ONP_CV] = PY_001.getCurrentActiveDuration() / 1000;
+  modbusRegisters[HR_PY_001_OFP_CV] = PY_001.getCurrentInactiveDuration() / 1000;
 
   // CO2
   modbusRegisters[HR_AT_102] = (unsigned int)AT_102MedianFilter.getMedian();
@@ -1545,7 +1545,7 @@ void setModbusFanOnDuration()
 {
   if (modbusRegisters[HW_MY_101_ONP_SP] != 0)
   {
-    MY_101.setOnDuration(modbusRegisters[HW_MY_101_ONP_SP]);
+    MY_101.setActiveDuration(modbusRegisters[HW_MY_101_ONP_SP]);
 
     EEPROMWriteDuration(modbusRegisters[HW_MY_101_ONP_SP],
                         EEPROM_FAN_ON_DURATION_ADDR);
@@ -1557,10 +1557,10 @@ void setModbusFanOffDuration()
 {
   if (modbusRegisters[HW_MY_101_OFP_SP] != 0)
   {
-    MY_101.setOffDuration(modbusRegisters[HW_MY_101_OFP_SP]);
+    MY_101.setInactiveDuration(modbusRegisters[HW_MY_101_OFP_SP]);
     EEPROMWriteDuration(modbusRegisters[HW_MY_101_OFP_SP],
                         EEPROM_FAN_OFF_DURATION_ADDR);
-    modbusRegisters[HW_MY_101_ONP_SP] = 0;
+    modbusRegisters[HW_MY_101_OFP_SP] = 0;
   }
 }
 
@@ -1568,7 +1568,7 @@ void setModbusCirculationPumpOnDuration()
 {
   if (modbusRegisters[HW_PY_001_ONP_SP] != 0)
   {
-    PY_001.setOnDuration(modbusRegisters[HW_PY_001_ONP_SP]);
+    PY_001.setActiveDuration(modbusRegisters[HW_PY_001_ONP_SP]);
 
     EEPROMWriteDuration(modbusRegisters[HW_PY_001_ONP_SP],
                         EEPROM_CIRCULATION_PUMP_ON_DURATION_ADDR);
@@ -1580,7 +1580,7 @@ void setModbusCirculationPumpOffDuration()
 {
   if (modbusRegisters[HW_PY_001_OFP_SP] != 0)
   {
-    PY_001.setOffDuration(modbusRegisters[HW_PY_001_OFP_SP]);
+    PY_001.setInactiveDuration(modbusRegisters[HW_PY_001_OFP_SP]);
 
     EEPROMWriteDuration(modbusRegisters[HW_PY_001_OFP_SP],
                         EEPROM_CIRCULATION_PUMP_OFF_DURATION_ADDR);
@@ -1860,13 +1860,13 @@ void EEPROMLoadConfig()
     EEPROM_SEEDING_AREA_ON_TIME_ADDR);
   seedingAreaLights.onLightsOn = doSeedingAreaLightsOn;
 
-  PY_001.setOnDuration(EEPROMReadDuration(
+  PY_001.setActiveDuration(EEPROMReadDuration(
                          EEPROM_CIRCULATION_PUMP_ON_DURATION_ADDR));
-  PY_001.setOffDuration(EEPROMReadDuration(
+  PY_001.setInactiveDuration(EEPROMReadDuration(
                           EEPROM_CIRCULATION_PUMP_OFF_DURATION_ADDR));
 
-  MY_101.setOnDuration(EEPROMReadDuration(EEPROM_FAN_ON_DURATION_ADDR));
-  MY_101.setOffDuration(EEPROMReadDuration(EEPROM_FAN_OFF_DURATION_ADDR));
+  MY_101.setActiveDuration(EEPROMReadDuration(EEPROM_FAN_ON_DURATION_ADDR));
+  MY_101.setInactiveDuration(EEPROMReadDuration(EEPROM_FAN_OFF_DURATION_ADDR));
 
   // Alarm.free( dutyCycleChangeAlarm.id );
   // dutyCycleChangeAlarm.id = Alarm.alarmRepeat(dutyCycleChangeAlarm.epoch,
@@ -2132,12 +2132,12 @@ void processCirculationPumpDurations()
 
   if (c == TIMER_ALARM_ON)
   {
-    PY_001.setOnDuration(duration);
+    PY_001.setActiveDuration(duration);
     EEPROMWriteDuration(duration, EEPROM_CIRCULATION_PUMP_ON_DURATION_ADDR);
   }
   else
   {
-    PY_001.setOffDuration(duration);
+    PY_001.setInactiveDuration(duration);
     EEPROMWriteDuration(duration, EEPROM_CIRCULATION_PUMP_OFF_DURATION_ADDR);
   }
 }
@@ -2152,12 +2152,12 @@ void processFanDurations()
 
   if (c == TIMER_ALARM_ON)
   {
-    MY_101.setOnDuration(duration);
+    MY_101.setActiveDuration(duration);
     EEPROMWriteDuration(duration, EEPROM_FAN_ON_DURATION_ADDR);
   }
   else
   {
-    MY_101.setOffDuration(duration);
+    MY_101.setInactiveDuration(duration);
     EEPROMWriteDuration(duration, EEPROM_FAN_OFF_DURATION_ADDR);
   }
 }
