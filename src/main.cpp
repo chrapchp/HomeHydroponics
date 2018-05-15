@@ -37,6 +37,7 @@
 #include <DA_HOASwitch.h>
 #include <DA_AtlasPH.h>
 #include <DA_AtlasEC.h>
+#include <DA_PeristalticPump.h>
 
 #include "PlantModbus.h"
 
@@ -143,6 +144,20 @@ RunningMedian AT_102MedianFilter = RunningMedian(5);
 #define EC_I2C_ADDRESS 101
 DA_AtlasPH AT_001 = DA_AtlasPH(PH_DEFAULT_I2C_ADDRESS);
 DA_AtlasEC AT_002 = DA_AtlasEC(EC_DEFAULT_I2C_ADDRESS);
+
+// Nutrient Pump Volume to dispense when on Manual
+#define XY_001_V 10 // ml
+#define XY_002_V 10 // ml
+
+// ph Down pump volume to dispense when on Manual
+#define XY_003_V 2 // ml
+
+// Hydrogen Peroxide pump volume to dispense when on Manual
+#define XY_004_V 5 // ml
+
+
+
+
 
 /*
    Blue Serial IIC/I2C/TWI 2004 204 20X4 Character LCD Module Display For
@@ -300,6 +315,16 @@ DA_HOASwitch HS_102AB = DA_HOASwitch(52, 0, 53);
 
 // Growing Chamber LED : HOA
 DA_HOASwitch HS_103AB = DA_HOASwitch(10, 0, 11);
+
+// Nutrient 1 Pump
+DA_PeristalticPump XY_001 = DA_PeristalticPump(44, HIGH);
+// Nutrient 2 Pump
+DA_PeristalticPump XY_002 = DA_PeristalticPump(45, HIGH);
+// pH Down Pump
+DA_PeristalticPump XY_003 = DA_PeristalticPump(46, HIGH);
+
+//Hydrogen Peroxide Pump
+//DA_PeristalticPump XY_004 = DA_PeristalticPump(47, HIGH);
 
 
 TimeChangeRule usMDT =
@@ -1116,6 +1141,10 @@ void refreshDiscreteOutputs()
 {
   PY_001.refresh(); // on/off timer
   MY_101.refresh(); // on/off timer
+  XY_001.refresh();
+  XY_002.refresh();
+  XY_003.refresh();
+  //XY_001.refresh();
 }
 
 void doOnMidnight()

@@ -60,6 +60,11 @@
 #define CW_AT_001_CR   101     // pH Calibrate Clear
 #define CW_AT_001_CQ   102     // pH Calibrate Query
 #define CW_AT_001_TC   103     // pH Temperature Compensate
+#define CW_XY_001   104        // Nutrient 1 Pump Run
+#define CW_XY_002   105        // Nutrient 2 Pump Run
+#define CW_XY_003   106        // pH Down Pump Run
+#define CW_XY_004   107        // Hydrogen Peroxide Pump Run
+
 
 // Read holding registers 16 bit
 #define HR_HS_001HOA   30      // Circulation Pump  HOA  (H=1, O=2, A=3)
@@ -109,7 +114,13 @@
                                //  Setpoint
 #define HW_PY_001_ONP_SP   13  // Circulation Pump 120VAC ON Period in sec
                                //  Setpoint
-                               //
+#define HW_XY_001_HOA   14        // Nutrient 1 Pump HOA (H=1,O=0,A=2)
+#define HW_XY_002_HOA   15        // Nutrient 2 Pump  HOA (H=1,O=0,A=2)
+#define HW_XY_003_HOA   16        // pH Down Pump  HOA (H=1,O=0,A=2)
+#define HW_AT_001_SP   17        // pH Setpoint (pH * 10 )
+#define HW_AT_002_SP   18        // EC Setpoint
+
+//
 // Write holding registers 32 bits
 #define HW_DY_102_OFT_SP   60        // Seeding Area LED OFF Time  (UNIX EPOCH)  Setpoint  Local Time
 #define HW_DY_102_ONT_SP   62        // Seeding Area Chamber LED ON Time (UNIX EPOCH) Setpoint  Local Time
@@ -126,15 +137,15 @@
 
 union
 {
-  unsigned int regsf[2];
-  float        val;
+        unsigned int regsf[2];
+        float val;
 }
 bfconvert;
 
 union
 {
-  unsigned int regsl[2];
-  long         val;
+        unsigned int regsl[2];
+        long val;
 }
 blconvert;
 
