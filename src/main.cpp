@@ -14,7 +14,6 @@
  */
 
 #include <Time.h>
-#include <HardwareSerial.h>
 #include <TimeLib.h>
 #include <Timezone.h>   // https://github.com/JChristensen/Timezone
 #include <OneWire.h>
@@ -40,7 +39,7 @@
 #include <DA_PeristalticPump.h>
 
 #include "PlantModbus.h"
-
+#include "DA_NutrientController.h"
 #define DEFAULT_LIGHTS_ON_ALARM_TIME 1519992000       // AlarmHMS (5, 0, 0)
 #define DEFAULT_LIGHTS_OFF_ALARM_TIME 1520056800      // AlarmHMS (23, 0, 0)
 #define DEFAULT_RESET_TIME  1519974000                // AlarmHMS(0, 0, 0) //
@@ -49,6 +48,16 @@
 #define DEFAULT_CIRCULATION_PUMP_OFF_DURATION 45 * 60 // 45 min * 60 s
 #define DEFAULT_FAN_ON_DURATION 30 * 60               // 30 min * 60 s
 #define DEFAULT_FAN_OFF_DURATION 30 * 60              // 30 min * 60 s
+
+#define DEFAULT_PH_AUTO_VOLUME 10                     // ml
+#define DEFAULT_PH_AUTO_INTERVAL 60                   // s
+#define DEFAULT_PH_MANUAL_VOLUME 10                   // ml
+#define DEFAULT_N1N2_AUTO_VOLUME 10                   // ml
+#define DEFAULT_N1N2_AUTO_INTERVAL 60                 // s
+#define DEFAULT_N1N2_MANUAL_VOLUME 25                 // ml
+#define DEFAULT_PH_SETPOINT 60                        // * 10
+#define DEFAULT_EC_SETPOINT 1100                      // uS/cm
+#define DEFAULT_XIC_MODE 0                            // off
 
 #define STRLEN(s) (sizeof(s) / sizeof(s[0]))
 
@@ -76,15 +85,33 @@ const unsigned long DEFAULT_TIME = 1000188000;
   sizeof(unsigned int)
 #define EEPROM_CIRCULATION_PUMP_OFF_DURATION_ADDR \
   EEPROM_CIRCULATION_PUMP_ON_DURATION_ADDR + sizeof(unsigned int)
-
-#define VERSION 110 // imlied two decimal
+#define EEPROM_PH_SETPOINT_ADDR \
+  EEPROM_CIRCULATION_PUMP_OFF_DURATION_ADDR + sizeof(unsigned int)
+#define EEPROM_EC_SETPOINT_ADDR \
+  EEPROM_PH_SETPOINT_ADDR + sizeof(unsigned int)
+#define EEPROM_N1N2_MANUAL_VOL_ADDR \
+  EEPROM_EC_SETPOINT_ADDR + sizeof(unsigned int)
+#define EEPROM_N1N2_AUTO_VOL_ADDR \
+  EEPROM_N1N2_MANUAL_VOL_ADDR + sizeof(unsigned int)
+#define EEPROM_PH_AUTO_VOL_ADDR \
+  EEPROM_N1N2_AUTO_VOL_ADDR + sizeof(unsigned int)
+#define EEPROM_PH_AUTO_INTERVAL_ADDR \
+  EEPROM_PH_AUTO_VOL_ADDR + sizeof(unsigned int)
+#define EEPROM_PH_MANUAL_VOL_ADDR \
+  EEPROM_PH_AUTO_INTERVAL_ADDR + sizeof(unsigned int)
+#define EEPROM_N1N2_AUTO_INTERVAL_ADDR \
+  EEPROM_PH_MANUAL_VOL_ADDR + sizeof(unsigned int)
+#define EEPROM_N1N2_MODE_ADDR \
+  EEPROM_N1N2_AUTO_INTERVAL_ADDR + sizeof(unsigned int)
+#define EEPROM_PH_MODE_ADDR \
+  EEPROM_N1N2_MODE_ADDR + sizeof(unsigned int)
+#define VERSION 120 // imlied two decimal
 
 // comment out to not include terminal processing
-// #define PROCESS_TERMINAL
+ //#define PROCESS_TERMINAL
 // #define PROCESS_TERMINAL_VERBOSE
-HardwareSerial *tracePort = &Serial;
+Stream *debugOutputStream = &Serial;
 
-// comment out to not implement modbus
 #define PROCESS_MODBUS
 
 // refresh intervals
@@ -101,6 +128,7 @@ HardwareSerial *tracePort = &Serial;
                                                        RISING)
 #define DISABLE_FT002_SENSOR_INTERRUPTS detachInterrupt(digitalPinToInterrupt( \
                                                           FT002_SENSOR_INTERUPT_PIN))
+
 // iterrupt pin,calculation period in seconds
 DA_FlowMeter FT_002(FT002_SENSOR_INTERUPT_PIN, FLOW_CALC_PERIOD_SECONDS);
 
@@ -144,17 +172,6 @@ RunningMedian AT_102MedianFilter = RunningMedian(5);
 #define EC_I2C_ADDRESS 101
 DA_AtlasPH AT_001 = DA_AtlasPH(PH_DEFAULT_I2C_ADDRESS);
 DA_AtlasEC AT_002 = DA_AtlasEC(EC_DEFAULT_I2C_ADDRESS);
-
-// Nutrient Pump Volume to dispense when on Manual
-#define XY_001_V 10 // ml
-#define XY_002_V 10 // ml
-
-// ph Down pump volume to dispense when on Manual
-#define XY_003_V 2 // ml
-
-// Hydrogen Peroxide pump volume to dispense when on Manual
-#define XY_004_V 5 // ml
-
 
 
 
@@ -237,7 +254,7 @@ const float NUTRIENT_TANK_MIXTURE_MAX = NUTRIENT_TANK_HEIGHT -
                                         NUTRIENT_TANK_AIR_GAP;
 NewPing LT_002(15, 16, NUTRIENT_TANK_HEIGHT); // Water Level
 // from top,  0-> undefined Water Level present value in cm
-float   LT_002Raw = 0.0;
+float LT_002Raw = 0.0;
 
 RunningMedian LT_002MedianFilter = RunningMedian(5);
 
@@ -247,6 +264,7 @@ RunningMedian LT_002MedianFilter = RunningMedian(5);
 //
 // Seeding LED 120 VAC
 DA_DiscreteOutput DY_102 = DA_DiscreteOutput(31, LOW);
+
 // Growing Chamber LED
 DA_DiscreteOutput DY_103 = DA_DiscreteOutput(32, LOW);
 
@@ -316,15 +334,26 @@ DA_HOASwitch HS_102AB = DA_HOASwitch(52, 0, 53);
 // Growing Chamber LED : HOA
 DA_HOASwitch HS_103AB = DA_HOASwitch(10, 0, 11);
 
-// Nutrient 1 Pump
-DA_PeristalticPump XY_001 = DA_PeristalticPump(44, HIGH);
-// Nutrient 2 Pump
-DA_PeristalticPump XY_002 = DA_PeristalticPump(45, HIGH);
-// pH Down Pump
-DA_PeristalticPump XY_003 = DA_PeristalticPump(46, HIGH);
+// pH Down Pump Controller
+DA_NutrientController XIC_001 = DA_NutrientController(45,
+                                                      HIGH,
+                                                      6,
+                                                      DA_NutrientController::RISINGTREND);
 
-//Hydrogen Peroxide Pump
-//DA_PeristalticPump XY_004 = DA_PeristalticPump(47, HIGH);
+// Nutrient 1 Pump Controller
+DA_NutrientController XIC_002 = DA_NutrientController(46,
+                                                      HIGH,
+                                                      1100,
+                                                      DA_NutrientController::FALLINGTREND);
+
+// Nutrient 2 Pump Controller
+DA_NutrientController XIC_003 = DA_NutrientController(47,
+                                                      HIGH,
+                                                      1100,
+                                                      DA_NutrientController::FALLINGTREND);
+
+// Hydrogen Peroxide Pump
+// DA_PeristalticPump XY_004 = DA_PeristalticPump(47, HIGH);
 
 
 TimeChangeRule usMDT =
@@ -371,7 +400,7 @@ AlarmEntry onTemperatureCompensate; // atlas sensor temperature compensation
 
 
 /**
-*  forward declarations
+ *  forward declarations
  * .ino file converted to plantformIO main.c
  */
 time_t       alarmTimeToUTC(time_t localAlarmTime);
@@ -393,15 +422,15 @@ time_t       EEPROMReadAlarmEntry(unsigned int atAddress);
 void         EEPROMWriteAlarmEntry(time_t       epoch,
                                    unsigned int atAddress);
 void         EEPROMWriteDefaultConfig();
-void         EEPROMWriteDuration(unsigned int duration,
-                                 unsigned int atAddress);
+void         EEPROMWriteUint16(unsigned int duration,
+                               unsigned int atAddress);
 bool         getModbusCoilValue(unsigned short startAddress,
                                 unsigned short bitPos);
 void         initOneWire();
 void         initOneWireDevice(DeviceAddress aDevice,
                                uint8_t       aIndex);
 unsigned int isEEPROMConfigured();
-unsigned int EEPROMReadDuration(unsigned int atAddress);
+unsigned int EEPROMReadUint16(unsigned int atAddress);
 void         on_AT_102_Falling();
 void         on_AT_102_Falling();
 void         on_AT_102_Rising();
@@ -424,12 +453,13 @@ void         onAtlasPhSample(IO_TYPE type,
                              float   value);
 void         onFT_002_PulseIn();
 void         onFT_003_PulseIn();
-void         printOneWireAddress(HardwareSerial *tracePort,
-                                 DeviceAddress   aDeviceAddress,
-                                 bool            aCR);
+void         printOneWireAddress(Stream       *debugOutputStream,
+                                 DeviceAddress aDeviceAddress,
+                                 bool          aCR);
 void         processModbusCommands();
 void         processModbusECCommands();
 void         processModbusPHCommands();
+void         processModbusXICCommands();
 void         refreshDiscreteInputs();
 void         refreshDiscreteOutputs();
 void         refreshModbusRegisters();
@@ -447,6 +477,7 @@ void         setModbusGrowingChamberLightsOnTime();
 void         setModbusSeedingAreaLightsOffTime();
 void         setModbusSeedingAreaLightsOffTime();
 void         setModbusSeedingAreaLightsOnTime();
+
 void         setModbusTime();
 void         setupLCD();
 void         setupLCDScreens();
@@ -464,6 +495,7 @@ void processCalibrateMessage(IO_TYPE aIO_Type);
 void processTemperatureCompensation();
 void processSerializeMessage();
 void processTimeSetMessage();
+void processControllerMessage();
 void showCommands();
 void processFanDurations();
 void processCirculationPumpDurations();
@@ -487,7 +519,7 @@ void displayAlarm(char              *who,
 void setup()
 {
 #ifdef PROCESS_TERMINAL
-  tracePort->begin(9600);
+  Serial.begin(9600);
 #endif // ifdef PROCESS_TERMINAL
 
 #ifdef PROCESS_MODBUS
@@ -513,6 +545,7 @@ void setup()
 
   onMidnight.epoch = alarmTimeToUTC(DEFAULT_RESET_TIME);
   onMidnight.id    = Alarm.alarmRepeat(onMidnight.epoch, doOnMidnight);
+
 
   if (isEEPROMConfigured() == EEPROM_CONFIGURED)
   {
@@ -556,6 +589,11 @@ void setup()
   AT_002.retrieveCompensatedTemperature();
 
 
+  //XIC_001.serialize(debugOutputStream, true);
+  //XIC_002.serialize(debugOutputStream, true);
+  //XIC_003.serialize(debugOutputStream, true);
+  XIC_001.setMaxFlowRate(27); // pH pump runs slower than the other two for some reason
+  // XIX_001.setAutoControlParameters(10, 60);
   // 1-wire
   sensors.begin();
   initOneWire();
@@ -567,6 +605,8 @@ void setup()
   FT_003.setMeterFactor(7.5);
   ENABLE_CO2_SENSOR_RISING_INTERRUPTS;
   lcd.clear();
+  MY_101.start(DA_DiscreteOutputTmr::Continuous);
+  PY_001.start(DA_DiscreteOutputTmr::Continuous);
 }
 
 void loop()
@@ -584,7 +624,12 @@ void loop()
   refreshDiscreteInputs();
   refreshDiscreteOutputs();
   Alarm.delay(ALARM_REFRESH_INTERVAL);
-
+  XIC_001.setPV(AT_001.getSample());
+  XIC_001.refresh();
+  XIC_002.setPV(AT_002.getSample());
+  XIC_002.refresh();
+  XIC_003.setPV(AT_002.getSample());
+  XIC_003.refresh();
 
   if (currentIOType == i2c_ph)
   {
@@ -595,7 +640,7 @@ void loop()
     AT_002.refresh();
   }
 
-  // . AT_001.serialize(tracePort,true);
+  // . AT_001.serialize(debugOutputStream,true);
   // doReadInputs();
   // doUpdateOutputs();
   // LSL_100.refresh();
@@ -651,9 +696,9 @@ void on_AT_102_Falling()
 void on_InletValve_Process(bool state, int aPin)
 {
 #ifdef PROCESS_TERMINAL_VERBOSE
-  *tracePort << "on_InletValve_Process HS_002, LSHH_002" << endl;
-  HS_002.serialize(tracePort, true);
-  LSHH_002.serialize(tracePort, true);
+  *debugOutputStream << "on_InletValve_Process HS_002, LSHH_002" << endl;
+  HS_002.serialize(debugOutputStream, true);
+  LSHH_002.serialize(debugOutputStream, true);
 #endif // ifdef PROCESS_TERMINAL_VERBOSE
 
   if ((HS_002.getSample() == LOW) &&
@@ -676,16 +721,16 @@ void on_LCD_Previous_Screen(bool state, int aPin)
 void on_LCD_Enter(bool state, int aPin)
 {
 #ifdef PROCESS_TERMINAL_VERBOSE
-  *tracePort << "TO DO: LCD Enter HS_003C" << endl;
-  HS_003C.serialize(tracePort, true);
+  *debugOutputStream << "TO DO: LCD Enter HS_003C" << endl;
+  HS_003C.serialize(debugOutputStream, true);
 #endif // ifdef PROCESS_TERMINAL_VERBOSE
 }
 
 void on_DrainPump_Process(bool state, int aPin)
 {
 #ifdef PROCESS_TERMINAL_VERBOSE
-  *tracePort << "on_DrainPump_Process HS_001" << endl;
-  HS_001.serialize(tracePort, true);
+  *debugOutputStream << "on_DrainPump_Process HS_001" << endl;
+  HS_001.serialize(debugOutputStream, true);
 #endif // ifdef PROCESS_TERMINAL_VERBOSE
 
   if (HS_001.getSample() == LOW)
@@ -698,8 +743,8 @@ void on_DrainPump_Process(bool state, int aPin)
 void on_Circulation_Pump_Process(DA_HOASwitch::HOADetectType state)
 {
 #ifdef PROCESS_TERMINAL_VERBOSE
-  *tracePort << "on_Circulation_Pump_Process HS_001AB" << endl;
-  HS_001AB.serialize(tracePort, true);
+  *debugOutputStream << "on_Circulation_Pump_Process HS_001AB" << endl;
+  HS_001AB.serialize(debugOutputStream, true);
 #endif // ifdef PROCESS_TERMINAL_VERBOSE
 
   switch (state)
@@ -735,8 +780,8 @@ void on_Circulation_Pump_Process(DA_HOASwitch::HOADetectType state)
 void on_GrowingChamberLED_Process(DA_HOASwitch::HOADetectType state)
 {
 #ifdef PROCESS_TERMINAL_VERBOSE
-  *tracePort << "on_FlowingLED_Process HS_103AB" << endl;
-  HS_103AB.serialize(tracePort, true);
+  *debugOutputStream << "on_FlowingLED_Process HS_103AB" << endl;
+  HS_103AB.serialize(debugOutputStream, true);
 #endif // ifdef PROCESS_TERMINAL_VERBOSE
 
   switch (state)
@@ -762,8 +807,8 @@ void on_GrowingChamberLED_Process(DA_HOASwitch::HOADetectType state)
 void on_SeedingAreaLED_Process(DA_HOASwitch::HOADetectType state)
 {
 #ifdef PROCESS_TERMINAL_VERBOSE
-  *tracePort << "on_NonFlowingLED_Process HS_102AB" << endl;
-  HS_102AB.serialize(tracePort, true);
+  *debugOutputStream << "on_NonFlowingLED_Process HS_102AB" << endl;
+  HS_102AB.serialize(debugOutputStream, true);
 #endif // ifdef PROCESS_TERMINAL_VERBOSE
 
   switch (state)
@@ -794,7 +839,8 @@ void setupRTC()
   if (timeStatus() != timeSet)
   {
 #ifdef PROCESS_TERMINAL
-    *tracePort << F("Unable to sync with the RTC-setting to default") << endl;
+    *debugOutputStream << F("Unable to sync with the RTC-setting to default") <<
+      endl;
 #endif // ifdef PROCESS_TERMINAL
     RTC.set(DEFAULT_TIME); // set the RTC and the system time to the received
                            // value
@@ -804,25 +850,25 @@ void setupRTC()
   else
   {
 #ifdef PROCESS_TERMINAL
-    *tracePort << F("RTC has set the system time") << endl;
-    *tracePort << F("Enter Command:") << endl;
+    *debugOutputStream << F("RTC has set the system time") << endl;
+    *debugOutputStream << F("Enter Command:") << endl;
 #endif // ifdef PROCESS_TERMINAL
   }
 }
 
 #ifdef PROCESS_TERMINAL
-void printOneWireAddress(HardwareSerial *tracePort,
-                         DeviceAddress   aDeviceAddress,
-                         bool            aCR)
+void printOneWireAddress(Stream       *debugOutputStream,
+                         DeviceAddress aDeviceAddress,
+                         bool          aCR)
 {
   for (uint8_t i = 0; i < 8; i++)
   {
     // zero pad the address if necessary
-    if (aDeviceAddress[i] < 16) *tracePort << '0';
-    tracePort->print(aDeviceAddress[i], HEX);
+    if (aDeviceAddress[i] < 16) *debugOutputStream << '0';
+    debugOutputStream->print(aDeviceAddress[i], HEX);
   }
 
-  if (aCR) *tracePort << endl;
+  if (aCR) *debugOutputStream << endl;
 }
 
 #endif // ifdef PROCESS_TERMINAL
@@ -834,9 +880,10 @@ void initOneWireDevice(DeviceAddress aDevice, uint8_t aIndex)
     // TODO Alarm
 
 #ifdef PROCESS_TERMINAL
-    *tracePort << "Unable to find address for Device at index " << aIndex <<
+    *debugOutputStream << "Unable to find address for Device at index " <<
+      aIndex <<
       "address:";
-    printOneWireAddress(tracePort, aDevice, true);
+    printOneWireAddress(debugOutputStream, aDevice, true);
 #endif // ifdef PROCESS_TERMINAL
 
     sensors.setResolution(aDevice, ONE_TEMPERATURE_PRECISION);
@@ -908,14 +955,15 @@ void displayHomeScreen(bool clearScreen)
   lcd << F("Rel Hum:") << _FLOAT(AT_101H, 1) << "%";
 
   /*
-   * tracePort << "Sonar:cm:" << LT_002Raw << endl;
-   * tracePort << "Ambient Temperature:" <<
+   * debugOutputStream << "Sonar:cm:" << LT_002Raw << endl;
+   * debugOutputStream << "Ambient Temperature:" <<
    * sensors.getTempC(ambientTemperatureAddress) << "C" << endl;
-   * tracePort << "Mixture Temperature:" <<
+   * debugOutputStream << "Mixture Temperature:" <<
    * sensors.getTempC(mixtureTemperatureAddress) << "C" << endl;
-   * tracePort << "HT-101: " << "Rel Humidity:" << AT_101H << " % Temperature:"
+   * debugOutputStream << "HT-101: " << "Rel Humidity:" << AT_101H << " %
+   * Temperature:"
    *<< AT_101T;
-   * tracePort << " C Heat Index " << AT_101HI << endl;
+   * debugOutputStream << " C Heat Index " << AT_101HI << endl;
    * */
 }
 
@@ -1028,7 +1076,7 @@ void traceAlarmTime(char *label, time_t utcTime)
   time_t localAlarmTime = alarmTimeToLocal(utcTime);
 
   sprintf(sprintfBuf, "%02d:%02d", hour(localAlarmTime), minute(localAlarmTime));
-  *tracePort << label << "=" << sprintfBuf <<
+  *debugOutputStream << label << "=" << sprintfBuf <<
   (isAM(localAlarmTime) == true ? "AM" : "PM") << endl;
 }
 
@@ -1112,13 +1160,13 @@ void setupLCDScreens()
 
 void onAtlasPhSample(IO_TYPE type, float value)
 {
-  // AT_001.serialize( tracePort, true);
+  // AT_001.serialize( debugOutputStream, true);
   currentIOType = i2c_ec;
 }
 
 void onAtlasECSample(IO_TYPE type, float value)
 {
-  // AT_002.serialize( tracePort, true);
+  // AT_002.serialize( debugOutputStream, true);
   currentIOType = i2c_ph;
 }
 
@@ -1141,17 +1189,13 @@ void refreshDiscreteOutputs()
 {
   PY_001.refresh(); // on/off timer
   MY_101.refresh(); // on/off timer
-  XY_001.refresh();
-  XY_002.refresh();
-  XY_003.refresh();
-  //XY_001.refresh();
 }
 
 void doOnMidnight()
 {
   // FT_002.dayRollOver();
-  // *tracePort << "day Rollover:";
-  // FT_002.serialize(tracePort, true);
+  // *debugOutputStream << "day Rollover:";
+  // FT_002.serialize(debugOutputStream, true);
 }
 
 void refreshLCD()
@@ -1167,7 +1211,8 @@ void doOnCalcFlowRate()
   DISABLE_FT003_SENSOR_INTERRUPTS;
   FT_003.end();
   FT_003.begin();
-  //refreshLCD();
+
+  // refreshLCD();
   AT_102MedianFilter.add(AT_102Raw);
   ENABLE_FT002_SENSOR_INTERRUPTS;
   ENABLE_FT003_SENSOR_INTERRUPTS;
@@ -1226,6 +1271,7 @@ void doOnTemperatureCompensate()
 void do_ONP_SPoll()
 {
   float tLevel;
+
   doLightControl(&growingChamberLights);
   doLightControl(&seedingAreaLights);
 
@@ -1247,7 +1293,7 @@ void do_ONP_SPoll()
   {
 #ifdef PROCESS_TERMINAL
 
-    // *tracePort << "Error reading from DHT-22 sensor." << endl;
+    // *debugOutputStream << "Error reading from DHT-22 sensor." << endl;
 #endif // ifdef PROCESS_TERMINAL
   }
   else
@@ -1274,7 +1320,7 @@ void doGrowingChamberLightsOn()
 
 #ifdef PROCESS_TERMINAL
 
-  // *tracePort << "...Growing Chamber Lights on" << endl;
+  // *debugOutputStream << "...Growing Chamber Lights on" << endl;
 #endif // ifdef PROCESS_TERMINAL
 }
 
@@ -1286,7 +1332,7 @@ void doGrowingChamberLightsOff()
 
 #ifdef PROCESS_TERMINAL
 
-  // *tracePort << "...Growing Chamber Lights off" << endl;
+  // *debugOutputStream << "...Growing Chamber Lights off" << endl;
 #endif // ifdef PROCESS_TERMINAL
 }
 
@@ -1297,7 +1343,7 @@ void doSeedingAreaLightsOn()
 
 #ifdef PROCESS_TERMINAL
 
-  // *tracePort << "...Seeding Lights on" << endl;
+  // *debugOutputStream << "...Seeding Lights on" << endl;
 #endif // ifdef PROCESS_TERMINAL
 }
 
@@ -1309,7 +1355,7 @@ void doSeedingAreaLightsOff()
 
 #ifdef PROCESS_TERMINAL
 
-  // *tracePort << "...Seeding Lights off" << endl;
+  // *debugOutputStream << "...Seeding Lights off" << endl;
 #endif // ifdef PROCESS_TERMINAL
 }
 
@@ -1327,7 +1373,8 @@ time_t alarmTimeToUTC(time_t localAlarmTime)
      utcAlarmTime -= SECS_PER_DAY;
    */
 
-  // *tracePort << "alarmTimeToUTC:localAlarmTime="  <<  localAlarmTime << "
+  // *debugOutputStream << "alarmTimeToUTC:localAlarmTime="  <<  localAlarmTime
+  // << "
   // UTC=" << utcAlarmTime << endl;
   return localAlarmTime;
 }
@@ -1458,6 +1505,19 @@ void refreshModbusRegisters()
   bfconvert.val                     = AT_002.getCompensatedTemperature();
   modbusRegisters[HR_AT_002_TV]     = bfconvert.regsf[0];
   modbusRegisters[HR_AT_002_TV + 1] = bfconvert.regsf[1];
+
+  modbusRegisters[HR_HS_001_HOA_CV] = XIC_001.getControlMode() + 1;
+  modbusRegisters[HR_HS_002_HOA_CV] = XIC_002.getControlMode() + 1;
+  modbusRegisters[HR_HS_003_HOA_CV] = XIC_003.getControlMode() + 1;
+
+  modbusRegisters[HR_AT_001_SP_CV] = (uint16_t)(XIC_001.getSP() * 10.0);
+  modbusRegisters[HR_AT_002_SP_CV] = (uint16_t)(XIC_002.getSP());
+  modbusRegisters[HR_AT_001_AV_CV] =  XIC_001.getAutoVolume();
+  modbusRegisters[HR_AT_001_AT_CV] = XIC_001.getAutoInterval();
+  modbusRegisters[HR_AT_001_MV_CV] = XIC_001.getManualVolume();
+  modbusRegisters[HR_AT_002_AV_CV] = XIC_002.getAutoVolume();
+  modbusRegisters[HR_AT_002_AT_CV] = XIC_002.getAutoInterval();
+  modbusRegisters[HR_AT_002_MV_CV] = XIC_002.getManualVolume();
 }
 
 void setModbusTime()
@@ -1539,8 +1599,8 @@ void setModbusFanOnDuration()
   {
     MY_101.setActiveDuration(modbusRegisters[HW_MY_101_ONP_SP]);
 
-    EEPROMWriteDuration(modbusRegisters[HW_MY_101_ONP_SP],
-                        EEPROM_FAN_ON_DURATION_ADDR);
+    EEPROMWriteUint16(modbusRegisters[HW_MY_101_ONP_SP],
+                      EEPROM_FAN_ON_DURATION_ADDR);
     modbusRegisters[HW_MY_101_ONP_SP] = 0;
   }
 }
@@ -1550,8 +1610,8 @@ void setModbusFanOffDuration()
   if (modbusRegisters[HW_MY_101_OFP_SP] != 0)
   {
     MY_101.setInactiveDuration(modbusRegisters[HW_MY_101_OFP_SP]);
-    EEPROMWriteDuration(modbusRegisters[HW_MY_101_OFP_SP],
-                        EEPROM_FAN_OFF_DURATION_ADDR);
+    EEPROMWriteUint16(modbusRegisters[HW_MY_101_OFP_SP],
+                      EEPROM_FAN_OFF_DURATION_ADDR);
     modbusRegisters[HW_MY_101_OFP_SP] = 0;
   }
 }
@@ -1562,8 +1622,8 @@ void setModbusCirculationPumpOnDuration()
   {
     PY_001.setActiveDuration(modbusRegisters[HW_PY_001_ONP_SP]);
 
-    EEPROMWriteDuration(modbusRegisters[HW_PY_001_ONP_SP],
-                        EEPROM_CIRCULATION_PUMP_ON_DURATION_ADDR);
+    EEPROMWriteUint16(modbusRegisters[HW_PY_001_ONP_SP],
+                      EEPROM_CIRCULATION_PUMP_ON_DURATION_ADDR);
     modbusRegisters[HW_PY_001_ONP_SP] = 0;
   }
 }
@@ -1574,8 +1634,8 @@ void setModbusCirculationPumpOffDuration()
   {
     PY_001.setInactiveDuration(modbusRegisters[HW_PY_001_OFP_SP]);
 
-    EEPROMWriteDuration(modbusRegisters[HW_PY_001_OFP_SP],
-                        EEPROM_CIRCULATION_PUMP_OFF_DURATION_ADDR);
+    EEPROMWriteUint16(modbusRegisters[HW_PY_001_OFP_SP],
+                      EEPROM_CIRCULATION_PUMP_OFF_DURATION_ADDR);
     modbusRegisters[HW_PY_001_OFP_SP] = 0;
   }
 }
@@ -1741,6 +1801,112 @@ void processModbusPHCommands()
   }
 }
 
+void processModbusXICCommands()
+{
+  // set and persist pH setpoint
+  if (modbusRegisters[HW_AT_001_SP] != 0)
+  {
+    XIC_001.setSP(((float)(modbusRegisters[HW_AT_001_SP]) / 10.0));
+
+    EEPROMWriteUint16(modbusRegisters[HW_AT_001_SP],
+                      EEPROM_PH_SETPOINT_ADDR);
+    modbusRegisters[HW_AT_001_SP] = 0;
+  }
+
+  // set and persist EC setpoint
+  if (modbusRegisters[HW_AT_002_SP] != 0)
+  {
+    XIC_002.setSP(modbusRegisters[HW_AT_002_SP]);
+    XIC_003.setSP(modbusRegisters[HW_AT_002_SP]);
+    EEPROMWriteUint16(modbusRegisters[HW_AT_002_SP],
+                      EEPROM_EC_SETPOINT_ADDR);
+    modbusRegisters[HW_AT_002_SP] = 0;
+  }
+
+  // pH Auto Volume
+  if (modbusRegisters[HW_AT_001_AV] != 0)
+  {
+    XIC_001.setAutoVolume(modbusRegisters[HW_AT_001_AV]);
+
+    EEPROMWriteUint16(modbusRegisters[HW_AT_001_AV],
+                      EEPROM_PH_AUTO_VOL_ADDR);
+    modbusRegisters[HW_AT_001_AV] = 0;
+  }
+
+  // pH Auto Interval
+  if (modbusRegisters[HW_AT_001_AT] != 0)
+  {
+    XIC_001.setAutoInterval(modbusRegisters[HW_AT_001_AT]);
+
+    EEPROMWriteUint16(modbusRegisters[HW_AT_001_AT],
+                      EEPROM_PH_AUTO_INTERVAL_ADDR);
+    modbusRegisters[HW_AT_001_AT] = 0;
+  }
+
+  // pH Manual Volume
+  if (modbusRegisters[HW_AT_001_MV] != 0)
+  {
+    XIC_001.setManualVolume(modbusRegisters[HW_AT_001_MV]);
+
+    EEPROMWriteUint16(modbusRegisters[HW_AT_001_MV],
+                      EEPROM_PH_MANUAL_VOL_ADDR);
+    modbusRegisters[HW_AT_001_MV] = 0;
+  }
+
+
+  // N1/N2 Manual HOA
+  if (modbusRegisters[HW_HS_001_HOA] != 0)
+  {
+    XIC_001.setControlMode(modbusRegisters[HW_HS_001_HOA]);
+
+    EEPROMWriteUint16(modbusRegisters[HW_HS_001_HOA],
+                      EEPROM_PH_MODE_ADDR);
+    modbusRegisters[HW_HS_001_HOA] = 0;
+  }
+
+  // N1/N2 auto Volume
+  if (modbusRegisters[HW_AT_002_AV] != 0)
+  {
+    XIC_002.setAutoVolume(modbusRegisters[HW_AT_002_AV]);
+    XIC_003.setAutoVolume(modbusRegisters[HW_AT_002_AV]);
+    EEPROMWriteUint16(modbusRegisters[HW_AT_002_AV],
+                      EEPROM_N1N2_AUTO_VOL_ADDR);
+    modbusRegisters[HW_AT_002_AV] = 0;
+  }
+
+  // N1/N2 auto Interval
+  if (modbusRegisters[HW_AT_002_AT] != 0)
+  {
+    XIC_002.setAutoInterval(modbusRegisters[HW_AT_002_AT]);
+    XIC_003.setAutoInterval(modbusRegisters[HW_AT_002_AT]);
+    EEPROMWriteUint16(modbusRegisters[HW_AT_002_AT],
+                      EEPROM_N1N2_AUTO_INTERVAL_ADDR);
+    modbusRegisters[HW_AT_002_AT] = 0;
+  }
+
+  // N1/N2 Manual Volume
+  if (modbusRegisters[HW_AT_002_MV] != 0)
+  {
+    XIC_002.setManualVolume(modbusRegisters[HW_AT_002_MV]);
+    XIC_003.setManualVolume(modbusRegisters[HW_AT_002_MV]);
+
+    EEPROMWriteUint16(modbusRegisters[HW_AT_002_MV],
+                      EEPROM_N1N2_MANUAL_VOL_ADDR);
+    modbusRegisters[HW_AT_002_MV] = 0;
+  }
+
+  // N1/N2 Manual HOA
+  if (modbusRegisters[HW_HS_002_HOA] != 0)
+  {
+    XIC_002.setControlMode(modbusRegisters[HW_HS_002_HOA]);
+    XIC_003.setControlMode(modbusRegisters[HW_HS_002_HOA]);
+
+    EEPROMWriteUint16(modbusRegisters[HW_HS_002_HOA],
+                      EEPROM_N1N2_MODE_ADDR);
+    modbusRegisters[HW_HS_002_HOA] = 0;
+  }
+}
+
 void processModbusCommands()
 {
   setModbusTime();
@@ -1766,6 +1932,9 @@ void processModbusCommands()
   // atlas sensors
   processModbusPHCommands();
   processModbusECCommands();
+
+  // XICs
+  processModbusXICCommands();
 }
 
 /*
@@ -1787,24 +1956,39 @@ void EEPROMWriteDefaultConfig()
   EEPROMWriteAlarmEntry(epoch, EEPROM_GROWING_CHAMBER_OFF_TIME_ADDR);
   EEPROMWriteAlarmEntry(epoch, EEPROM_SEEDING_AREA_OFF_TIME_ADDR);
 
-  EEPROMWriteDuration(              DEFAULT_FAN_ON_DURATION,
-                                    EEPROM_FAN_ON_DURATION_ADDR);
-  EEPROMWriteDuration(             DEFAULT_FAN_OFF_DURATION,
-                                   EEPROM_FAN_OFF_DURATION_ADDR);
+  EEPROMWriteUint16(              DEFAULT_FAN_ON_DURATION,
+                                  EEPROM_FAN_ON_DURATION_ADDR);
+  EEPROMWriteUint16(             DEFAULT_FAN_OFF_DURATION,
+                                 EEPROM_FAN_OFF_DURATION_ADDR);
 
-  EEPROMWriteDuration( DEFAULT_CIRCULATION_PUMP_ON_DURATION,
-                       EEPROM_CIRCULATION_PUMP_ON_DURATION_ADDR);
-  EEPROMWriteDuration(DEFAULT_CIRCULATION_PUMP_OFF_DURATION,
-                      EEPROM_CIRCULATION_PUMP_OFF_DURATION_ADDR);
+  EEPROMWriteUint16( DEFAULT_CIRCULATION_PUMP_ON_DURATION,
+                     EEPROM_CIRCULATION_PUMP_ON_DURATION_ADDR);
+  EEPROMWriteUint16(DEFAULT_CIRCULATION_PUMP_OFF_DURATION,
+                    EEPROM_CIRCULATION_PUMP_OFF_DURATION_ADDR);
+
+  EEPROMWriteUint16(DEFAULT_CIRCULATION_PUMP_OFF_DURATION,
+                    EEPROM_CIRCULATION_PUMP_OFF_DURATION_ADDR);
+
+
+  EEPROMWriteUint16(    DEFAULT_PH_AUTO_VOLUME, EEPROM_PH_AUTO_VOL_ADDR);
+  EEPROMWriteUint16(  DEFAULT_PH_AUTO_INTERVAL, EEPROM_PH_AUTO_INTERVAL_ADDR);
+  EEPROMWriteUint16(  DEFAULT_PH_MANUAL_VOLUME, EEPROM_PH_MANUAL_VOL_ADDR);
+  EEPROMWriteUint16(  DEFAULT_N1N2_AUTO_VOLUME, EEPROM_N1N2_AUTO_VOL_ADDR);
+  EEPROMWriteUint16(DEFAULT_N1N2_AUTO_INTERVAL, EEPROM_N1N2_AUTO_INTERVAL_ADDR);
+  EEPROMWriteUint16(DEFAULT_N1N2_MANUAL_VOLUME, EEPROM_N1N2_MANUAL_VOL_ADDR);
+  EEPROMWriteUint16(       DEFAULT_EC_SETPOINT, EEPROM_EC_SETPOINT_ADDR);
+  EEPROMWriteUint16(       DEFAULT_PH_SETPOINT, EEPROM_PH_SETPOINT_ADDR);
+  EEPROMWriteUint16(          DEFAULT_XIC_MODE, EEPROM_PH_MODE_ADDR);
+  EEPROMWriteUint16(          DEFAULT_XIC_MODE, EEPROM_N1N2_MODE_ADDR);
 }
 
-void EEPROMWriteDuration(unsigned int duration, unsigned int atAddress)
+void EEPROMWriteUint16(unsigned int duration, unsigned int atAddress)
 {
   eeprom_write_block((const void *)&duration, (void *)atAddress,
                      sizeof(duration));
 }
 
-unsigned int EEPROMReadDuration(unsigned int atAddress)
+unsigned int EEPROMReadUint16(unsigned int atAddress)
 {
   unsigned int duration = 0;
 
@@ -1852,17 +2036,33 @@ void EEPROMLoadConfig()
     EEPROM_SEEDING_AREA_ON_TIME_ADDR);
   seedingAreaLights.onLightsOn = doSeedingAreaLightsOn;
 
-  PY_001.setActiveDuration(EEPROMReadDuration(
-                         EEPROM_CIRCULATION_PUMP_ON_DURATION_ADDR));
-  PY_001.setInactiveDuration(EEPROMReadDuration(
-                          EEPROM_CIRCULATION_PUMP_OFF_DURATION_ADDR));
+  PY_001.setActiveDuration(EEPROMReadUint16(
+                             EEPROM_CIRCULATION_PUMP_ON_DURATION_ADDR));
+  PY_001.setInactiveDuration(EEPROMReadUint16(
+                               EEPROM_CIRCULATION_PUMP_OFF_DURATION_ADDR));
 
-  MY_101.setActiveDuration(EEPROMReadDuration(EEPROM_FAN_ON_DURATION_ADDR));
-  MY_101.setInactiveDuration(EEPROMReadDuration(EEPROM_FAN_OFF_DURATION_ADDR));
+  MY_101.setActiveDuration(EEPROMReadUint16(EEPROM_FAN_ON_DURATION_ADDR));
+  MY_101.setInactiveDuration(EEPROMReadUint16(EEPROM_FAN_OFF_DURATION_ADDR));
 
-  // Alarm.free( dutyCycleChangeAlarm.id );
-  // dutyCycleChangeAlarm.id = Alarm.alarmRepeat(dutyCycleChangeAlarm.epoch,
-  // alterLEDPattern);
+  XIC_001.setSP(((float)EEPROMReadUint16(EEPROM_PH_SETPOINT_ADDR)) / 10.0);
+  XIC_001.setAutoVolume(EEPROMReadUint16(EEPROM_PH_AUTO_VOL_ADDR));
+  XIC_001.setAutoInterval(EEPROMReadUint16(EEPROM_PH_AUTO_INTERVAL_ADDR));
+  XIC_001.setManualVolume(EEPROMReadUint16(EEPROM_PH_MANUAL_VOL_ADDR));
+  XIC_001.setControlMode(EEPROMReadUint16(EEPROM_PH_MODE_ADDR));
+
+  XIC_002.setAutoVolume(EEPROMReadUint16(EEPROM_N1N2_AUTO_VOL_ADDR));
+  XIC_002.setAutoInterval(EEPROMReadUint16(EEPROM_N1N2_AUTO_INTERVAL_ADDR));
+  XIC_002.setManualVolume(EEPROMReadUint16(EEPROM_N1N2_MANUAL_VOL_ADDR));
+  XIC_002.setControlMode(EEPROMReadUint16(EEPROM_N1N2_MODE_ADDR));
+  XIC_002.setSP(EEPROMReadUint16(EEPROM_EC_SETPOINT_ADDR));
+
+  XIC_003.setAutoVolume(EEPROMReadUint16(EEPROM_N1N2_AUTO_VOL_ADDR));
+  XIC_003.setAutoInterval(EEPROMReadUint16(EEPROM_N1N2_AUTO_INTERVAL_ADDR));
+  XIC_003.setManualVolume(EEPROMReadUint16(EEPROM_N1N2_MANUAL_VOL_ADDR));
+  XIC_003.setControlMode(EEPROMReadUint16(EEPROM_N1N2_MODE_ADDR));
+  XIC_003.setSP(EEPROMReadUint16(EEPROM_EC_SETPOINT_ADDR));
+
+
 }
 
 #ifdef PROCESS_TERMINAL
@@ -1908,13 +2108,20 @@ void EEPROMLoadConfig()
 # define SERIALIZE_CIRCULATION_FAN 'f'
 # define SERIALIZE_PH 'p'
 # define SERIALIZE_EC 'e'
+# define SERIALIZE_XIC 'x'
 
-# define CALIBRATE_LOW 'l'    // EC, pH
-# define CALIBRATE_MID 'm'    // pH
-# define CALIBRATE_HIGH 'h'   // EC, pH
-# define CALIBRATE_DRY  'd'   // EC
-# define CALIBRATE_CLEAR  'c' // EC,pH
-# define CALIBRATE_QUERY  'q' // EC,pH
+# define CALIBRATE_LOW 'l'         // EC, pH
+# define CALIBRATE_MID 'm'         // pH
+# define CALIBRATE_HIGH 'h'        // EC, pH
+# define CALIBRATE_DRY  'd'        // EC
+# define CALIBRATE_CLEAR  'c'      // EC,pH
+# define CALIBRATE_QUERY  'q'      // EC,pH
+
+# define CONTROLLER_XIC_001_HEADER 'X'
+# define CONTROLLER_XIC_001_PV 'p' // PV
+# define CONTROLLER_XIC_001_SP 's' // set point
+# define CONTROLLER_XIC_001_TM 't' // trend mode
+# define CONTROLLER_XIC_001_CM 'm' // control mode
 
 
 void displayAlarm(char *who, struct _AlarmEntry aAlarmEntry)
@@ -1923,13 +2130,14 @@ void displayAlarm(char *who, struct _AlarmEntry aAlarmEntry)
 
   timeToBuffer(aAlarmEntry.epoch, buffer);
 
-  *tracePort << who << " id:" << aAlarmEntry.id << " UTC:" << buffer <<
+  *debugOutputStream << who << " id:" << aAlarmEntry.id << " UTC:" << buffer <<
     " epoch:" << aAlarmEntry.epoch;
 
 
   time_t localAlarmTime = alarmTimeToLocal(aAlarmEntry.epoch);
   timeToBuffer(localAlarmTime, buffer);
-  *tracePort << " Local:" << buffer << " epoch:" << localAlarmTime << endl;
+  *debugOutputStream << " Local:" << buffer << " epoch:" << localAlarmTime <<
+    endl;
 }
 
 void displayLightControlEntry(char *who, time_t anEpoch)
@@ -1938,50 +2146,55 @@ void displayLightControlEntry(char *who, time_t anEpoch)
 
   timeToBuffer(anEpoch, buffer);
 
-  *tracePort << who <<  " UTC:" << buffer << " epoch:" << anEpoch;
+  *debugOutputStream << who <<  " UTC:" << buffer << " epoch:" << anEpoch;
 
 
   time_t localAlarmTime = alarmTimeToLocal(anEpoch);
   timeToBuffer(localAlarmTime, buffer);
-  *tracePort << " Local:" << buffer << " epoch:" << localAlarmTime << endl;
+  *debugOutputStream << " Local:" << buffer << " epoch:" << localAlarmTime <<
+    endl;
 }
 
 void processDisplayIOMessage()
 {
-  char c = tracePort->read();
+  char c = debugOutputStream->read();
 
   if (c == IO_AMBIENT_TEMP)
   {
     // float h = AT_101.readHumidity(); // allow 1/4 sec to read
     // float t = AT_101.readTemperature();
-    *tracePort << "Sonar:cm:" << LT_002Raw << endl;
-    *tracePort << "Ambient Temperature:" << sensors.getTempC(
+    *debugOutputStream << "Sonar:cm:" << LT_002Raw << endl;
+    *debugOutputStream << "Ambient Temperature:" << sensors.getTempC(
       ambientTemperatureAddress) << "C" << endl;
-    *tracePort << "Mixture Temperature:" << sensors.getTempC(
+    *debugOutputStream << "Mixture Temperature:" << sensors.getTempC(
       mixtureTemperatureAddress) << "C" << endl;
-    *tracePort << "HT-101: " << "Rel Humidity:" << AT_101H << " % Temperature:" <<
+    *debugOutputStream << "HT-101: " << "Rel Humidity:" << AT_101H <<
+      " % Temperature:" <<
       AT_101T;
-    *tracePort << " C Heat Index " << AT_101HI << endl;
-    *tracePort << " LT_002Raw= " << LT_002Raw << endl;
+    *debugOutputStream << " C Heat Index " << AT_101HI << endl;
+    *debugOutputStream << " LT_002Raw= " << LT_002Raw << endl;
 
-    // AT_101.serialize( tracePort, true);
-    // *tracePort << "Abient Temp = " << TE_001.getScaledSample() << " C" <<
+    // AT_101.serialize( debugOutputStream, true);
+    // *debugOutputStream << "Abient Temp = " << TE_001.getScaledSample() << "
+    // C" <<
     // endl;
     // float hic = AT_101.computeHeatIndex(t, h, false);
-    // *tracePort << "DHT-22 Relative Humidity:" << h << " Temperature:" << t <<
+    // *debugOutputStream << "DHT-22 Relative Humidity:" << h << " Temperature:"
+    // << t <<
     // " C Humidex:" << hic << endl;
   }
   else
   if (c == IO_SOIL_MOISTURE)
   {
-    // *tracePort << "Soil Moisture = " << QE_001.getScaledSample() << "%" <<
+    // *debugOutputStream << "Soil Moisture = " << QE_001.getScaledSample() <<
+    // "%" <<
     // endl;
   }
 }
 
 void processDisplayMessage()
 {
-  char c = tracePort->read();
+  char c = debugOutputStream->read();
 
   if (c == DISPLAY_TIME)
   {
@@ -1991,31 +2204,33 @@ void processDisplayMessage()
     time_t atime = now();
     atime = usMT.toLocal(atime, &tcr);
     dateTimeToBuffer(atime, buffer);
-    *tracePort << buffer << endl;
+    *debugOutputStream << buffer << endl;
   }
   else
   if (c == DISPLAY_ALARMS)
   {
-    *tracePort << endl;
+    *debugOutputStream << endl;
     displayLightControlEntry("...GC Off", growingChamberLights.offEpoch);
     displayLightControlEntry( "...GC On", growingChamberLights.onEpoch);
     displayLightControlEntry("...SA Off", seedingAreaLights.offEpoch);
     displayLightControlEntry( "...SA On", seedingAreaLights.onEpoch);
     displayAlarm("...Reset Midnight", onMidnight);
 
-    // *tracePort << "Duty Cycle Period = " << dutyCycleChangeAlarm.epoch << " s
+    // *debugOutputStream << "Duty Cycle Period = " <<
+    // dutyCycleChangeAlarm.epoch << " s
     // id=" << dutyCycleChangeAlarm.id << endl;
   }
   else
   if (c == DISPLAY_DUTY_CYCLE)
   {
-    // *tracePort << "Duty Cycle = " << plantStrip.getDutyCycle() << endl;
+    // *debugOutputStream << "Duty Cycle = " << plantStrip.getDutyCycle() <<
+    // endl;
   }
 }
 
 void processLightsMessage()
 {
-  char c = tracePort->read();
+  char c = debugOutputStream->read();
 
   switch (c)
   {
@@ -2029,13 +2244,13 @@ void processLightsMessage()
 
   case LIGHTS_DUTY_CYCLE:
 
-    // plantStrip.setDutyCycle( tracePort->parseInt());
+    // plantStrip.setDutyCycle( debugOutputStream->parseInt());
     break;
 
   case LIGHTS_RESET_TO_DEFAULTS:
     EEPROMWriteDefaultConfig();
     EEPROMLoadConfig();
-    *tracePort << F("Settings set to Defaults") << endl;
+    *debugOutputStream << F("Settings set to Defaults") << endl;
     break;
 
   default:
@@ -2048,9 +2263,9 @@ void processAlarmEntryMessage(struct _AlarmEntry *aAlarmEntry,
                               OnTick_t            alarmHandler)
 {
   Alarm.free(aAlarmEntry->id);
-  unsigned int shour   = tracePort->parseInt();
-  unsigned int sminute = tracePort->parseInt();
-  unsigned int ssecond = tracePort->parseInt();
+  unsigned int shour   = debugOutputStream->parseInt();
+  unsigned int sminute = debugOutputStream->parseInt();
+  unsigned int ssecond = debugOutputStream->parseInt();
 
   aAlarmEntry->epoch = alarmTimeToUTC(AlarmHMS(shour, sminute, ssecond));
   aAlarmEntry->id    = Alarm.alarmRepeat(aAlarmEntry->epoch, alarmHandler);
@@ -2063,10 +2278,10 @@ void processAlarmEntryMessage(struct _AlarmEntry *aAlarmEntry,
 void processLightEntryMessage(time_t *anEpoch, unsigned int eepromAddr)
 {
   // Alarm.free(aAlarmEntry->id);
-  // unsigned int shour = tracePort -> parseInt();
-  // unsigned int sminute = tracePort -> parseInt();
-  // unsigned int ssecond = tracePort -> parseInt();
-  time_t localAlarmTime = tracePort->parseInt();
+  // unsigned int shour = debugOutputStream -> parseInt();
+  // unsigned int sminute = debugOutputStream -> parseInt();
+  // unsigned int ssecond = debugOutputStream -> parseInt();
+  time_t localAlarmTime = debugOutputStream->parseInt();
 
   // *anEpoch = alarmTimeToUTC(AlarmHMS(shour, sminute, ssecond));
   *anEpoch = alarmTimeToUTC(localAlarmTime);
@@ -2078,7 +2293,7 @@ void processLightEntryMessage(time_t *anEpoch, unsigned int eepromAddr)
 
 void processGCAlarmMessage()
 {
-  char c = tracePort->read();
+  char c = debugOutputStream->read();
 
   if (c == TIMER_ALARM_OFF)
   {
@@ -2097,7 +2312,7 @@ void processGCAlarmMessage()
 
 void processSAAlarmMessage()
 {
-  char c = tracePort->read();
+  char c = debugOutputStream->read();
 
   if (c == TIMER_ALARM_OFF)
   {
@@ -2116,83 +2331,98 @@ void processSAAlarmMessage()
 
 void processCirculationPumpDurations()
 {
-  char c = tracePort->read();
+  char c = debugOutputStream->read();
   unsigned int duration;
 
-  duration = (unsigned int)tracePort->parseInt();
+  duration = (unsigned int)debugOutputStream->parseInt();
 
 
   if (c == TIMER_ALARM_ON)
   {
     PY_001.setActiveDuration(duration);
-    EEPROMWriteDuration(duration, EEPROM_CIRCULATION_PUMP_ON_DURATION_ADDR);
+    EEPROMWriteUint16(duration, EEPROM_CIRCULATION_PUMP_ON_DURATION_ADDR);
   }
   else
   {
     PY_001.setInactiveDuration(duration);
-    EEPROMWriteDuration(duration, EEPROM_CIRCULATION_PUMP_OFF_DURATION_ADDR);
+    EEPROMWriteUint16(duration, EEPROM_CIRCULATION_PUMP_OFF_DURATION_ADDR);
   }
 }
 
 void processFanDurations()
 {
-  char c = tracePort->read();
+  char c = debugOutputStream->read();
   unsigned int duration;
 
-  duration = (unsigned int)tracePort->parseInt();
+  duration = (unsigned int)debugOutputStream->parseInt();
 
 
   if (c == TIMER_ALARM_ON)
   {
     MY_101.setActiveDuration(duration);
-    EEPROMWriteDuration(duration, EEPROM_FAN_ON_DURATION_ADDR);
+    EEPROMWriteUint16(duration, EEPROM_FAN_ON_DURATION_ADDR);
   }
   else
   {
     MY_101.setInactiveDuration(duration);
-    EEPROMWriteDuration(duration, EEPROM_FAN_OFF_DURATION_ADDR);
+    EEPROMWriteUint16(duration, EEPROM_FAN_OFF_DURATION_ADDR);
   }
 }
 
 void showCommands()
 {
-  *tracePort <<
+  *debugOutputStream <<
     "-------------------------------------------------------------------" << endl;
-  *tracePort << F("Dt - Display Date/Time") << endl;
-  *tracePort << F("Da - Display Alarms") << endl;
-  *tracePort << F("T9999999999 - Set time using UNIX Epoch numner") << endl;
-  *tracePort << F("G1HH:MM:SS - GC on") << endl;
-  *tracePort << F("G0HH:MM:SS  - GC Off ") << endl;
-  *tracePort << F("A1HH:MM:SS - SA on") << endl;
-  *tracePort << F("A0HH:MM:SS  - SA Off ") << endl;
-  *tracePort << F("Lc  - reset/clear settings to defaults ") << endl;
-  *tracePort << F("It  - display 1 wire temps and humidity, sonar") << endl;
-  *tracePort << F("Im  - display Soil Moisture") << endl;
-  *tracePort << F("?? - Display commands") << endl;
-  *tracePort << F("Sc - Serialize Circulation Pump") << endl;
-  *tracePort << F("Sf - Serialize Fan") << endl;
-  *tracePort << F("Sp - Serialize pH") << endl;
-  *tracePort << F("Se - Serialize EC") << endl;
-  *tracePort << F("Ep99.99 - Temperature Compensate pH") << endl;
-  *tracePort << F("Zl  - Calibrate pH Low") << endl;
-  *tracePort << F("Zm - Calibrate pH mid") << endl;
-  *tracePort << F("Zh - Calibrate pH High") << endl;
-  *tracePort << F("Zc - Clear pH Calibration") << endl;
-  *tracePort << F(
+  *debugOutputStream << F("Dt - Display Date/Time") << endl;
+  *debugOutputStream << F("Da - Display Alarms") << endl;
+  *debugOutputStream << F("T9999999999 - Set time using UNIX Epoch numner") <<
+    endl;
+  *debugOutputStream << F("G1HH:MM:SS - GC on") << endl;
+  *debugOutputStream << F("G0HH:MM:SS  - GC Off ") << endl;
+  *debugOutputStream << F("A1HH:MM:SS - SA on") << endl;
+  *debugOutputStream << F("A0HH:MM:SS  - SA Off ") << endl;
+  *debugOutputStream << F("Lc  - reset/clear settings to defaults ") << endl;
+  *debugOutputStream << F("It  - display 1 wire temps and humidity, sonar") <<
+    endl;
+  *debugOutputStream << F("Im  - display Soil Moisture") << endl;
+  *debugOutputStream << F("?? - Display commands") << endl;
+  *debugOutputStream << F("Sc - Serialize Circulation Pump") << endl;
+  *debugOutputStream << F("Sf - Serialize Fan") << endl;
+  *debugOutputStream << F("Sp - Serialize pH") << endl;
+  *debugOutputStream << F("Se - Serialize EC") << endl;
+  *debugOutputStream << F("Sx - Serialize XIC") << endl;
+  *debugOutputStream << F("Ep99.99 - Temperature Compensate pH") << endl;
+  *debugOutputStream << F("Zl  - Calibrate pH Low") << endl;
+  *debugOutputStream << F("Zm - Calibrate pH mid") << endl;
+  *debugOutputStream << F("Zh - Calibrate pH High") << endl;
+  *debugOutputStream << F("Zc - Clear pH Calibration") << endl;
+  *debugOutputStream << F(
     "Zq - Return calibration state (0=none, 1=1point, 2=2 point, 3=3point") <<
     endl;
-  *tracePort << F("Ee99.99 - Temperature Compensate EC") << endl;
-  *tracePort << F("Yl - Calibrate EC Low") << endl;
-  *tracePort << F("Yh - Calibrate EC High") << endl;
-  *tracePort << F("Yd - Calibrate EC Dry") << endl;
-  *tracePort << F("Yc - Clear EC Calibration") << endl;
-  *tracePort << F("Yq - Return calibration state (0=none, 1=1point, 2=2 point") <<
+  *debugOutputStream << F("Ee99.99 - Temperature Compensate EC") << endl;
+  *debugOutputStream << F("Yl - Calibrate EC Low") << endl;
+  *debugOutputStream << F("Yh - Calibrate EC High") << endl;
+  *debugOutputStream << F("Yd - Calibrate EC Dry") << endl;
+  *debugOutputStream << F("Yc - Clear EC Calibration") << endl;
+  *debugOutputStream << F(
+    "Yq - Return calibration state (0=none, 1=1point, 2=2 point") <<
     endl;
-  *tracePort << F("C19999999 - Circulation Pump On Duration in s") << endl;
-  *tracePort << F("CO9999999 - Circulation Pump Off Duration in s") << endl;
-  *tracePort << F("F19999999 - Fan On Duration in s") << endl;
-  *tracePort << F("FO9999999 - Fan Off Duration in s") << endl;
-  *tracePort <<
+  *debugOutputStream << F("C19999999 - Circulation Pump On Duration in s") <<
+    endl;
+  *debugOutputStream << F("CO9999999 - Circulation Pump Off Duration in s") <<
+    endl;
+  *debugOutputStream << F("F19999999 - Fan On Duration in s") << endl;
+  *debugOutputStream << F("FO9999999 - Fan Off Duration in s") << endl;
+
+  *debugOutputStream << F("Xs9999999 - set XIC SP") << endl;
+  *debugOutputStream << F("Xp9999999 - set XIC PV") << endl;
+  *debugOutputStream << F("Xm0|1|2   - set XIC MODE 0=OFF, 1=AUTO, 2=MANUAL") <<
+    endl;
+  *debugOutputStream << F(
+    "Xt0|1   - set XIC trend type 0=trendinup, 1=trendingdown") << endl;
+
+
+  *debugOutputStream <<
     "------------------------------------------------------------------" << endl;
 }
 
@@ -2200,9 +2430,9 @@ void processTimeSetMessage()
 {
   unsigned long pctime;
 
-  pctime = tracePort->parseInt();
+  pctime = debugOutputStream->parseInt();
 
-  // *tracePort << pctime << endl;
+  // *debugOutputStream << pctime << endl;
   if (pctime >= DEFAULT_TIME)
 
   // check the integer is a valid time (greater than Jan 1 2013)
@@ -2217,35 +2447,40 @@ void processTimeSetMessage()
     time_t atime = now();
     atime = usMT.toLocal(atime, &tcr);
     dateTimeToBuffer(atime, buffer);
-    *tracePort << buffer << endl;
+    *debugOutputStream << buffer << endl;
   }
 }
 
 void processSerializeMessage()
 {
-  char c = tracePort->read();
+  char c = debugOutputStream->read();
 
   switch (c)
   {
   case SERIALIZE_CIRCULATION_PUMP:
-    PY_001.serialize(tracePort, true);
+    PY_001.serialize(debugOutputStream, true);
     break;
 
   case SERIALIZE_CIRCULATION_FAN:
-    MY_101.serialize(tracePort, true);
+    MY_101.serialize(debugOutputStream, true);
     break;
 
   case SERIALIZE_PH:
-    AT_001.serialize(tracePort, true);
+    AT_001.serialize(debugOutputStream, true);
     break;
 
   case SERIALIZE_EC:
-    AT_002.serialize(tracePort, true);
+    AT_002.serialize(debugOutputStream, true);
     break;
 
   case LIGHTS_DUTY_CYCLE:
 
-    // plantStrip.setDutyCycle( tracePort->parseInt());
+    // plantStrip.setDutyCycle( debugOutputStream->parseInt());
+    break;
+
+  case SERIALIZE_XIC:
+    XIC_001.serialize(debugOutputStream, true);
+
     break;
 
   default:
@@ -2253,12 +2488,51 @@ void processSerializeMessage()
   }
 }
 
+void processControllerMessage()
+{
+  char  c = debugOutputStream->read();
+  int   x;
+  float y;
+
+  switch (c)
+  {
+  case CONTROLLER_XIC_001_PV:
+    y = debugOutputStream->parseFloat();
+    XIC_001.setPV(y);
+    break;
+
+  case CONTROLLER_XIC_001_SP:
+    y = debugOutputStream->parseFloat();
+    XIC_001.setSP(y);
+    break;
+
+  case CONTROLLER_XIC_001_CM:
+    x = debugOutputStream->parseInt();
+
+    if (x == 0) XIC_001.setControlMode(DA_NutrientController::COFF);
+    else if (x == 1) XIC_001.setControlMode(DA_NutrientController::CAUTO);
+    else XIC_001.setControlMode(DA_NutrientController::CMANUAL);
+    break;
+
+  case CONTROLLER_XIC_001_TM:
+    x = debugOutputStream->parseInt();
+
+    if (x == 0) XIC_001.setTrendingMode(DA_NutrientController::RISINGTREND);
+    else XIC_001.setTrendingMode(DA_NutrientController::FALLINGTREND);
+    break;
+    break;
+
+  default:
+    *debugOutputStream << "invalid controller command" << endl;
+  }
+}
+
 void processTemperatureCompensation()
 {
-  char  c = tracePort->read();
+  char  c = debugOutputStream->read();
   float temperature;
 
-  temperature = tracePort->parseFloat();
+  temperature = debugOutputStream->parseFloat();
 
   if (c == SERIALIZE_PH)
   {
@@ -2276,69 +2550,75 @@ void processTemperatureCompensation()
 
 void processCalibrateMessage(IO_TYPE aIO_Type)
 {
-  char calCmd = tracePort->read();
+  char calCmd = debugOutputStream->read();
 
   switch (calCmd)
   {
   case CALIBRATE_LOW:
 
     if (aIO_Type ==
-        i2c_ec) *tracePort << "EC Cal Low:" << AT_002.calibrateLow() << endl;
-    else *tracePort << "pH Cal Low:" << AT_001.calibrateLow() << endl;
+        i2c_ec) *debugOutputStream << "EC Cal Low:" << AT_002.calibrateLow() <<
+        endl;
+    else *debugOutputStream << "pH Cal Low:" << AT_001.calibrateLow() << endl;
     break;
 
   case CALIBRATE_MID:
 
-    if (aIO_Type == i2c_ec) *tracePort << "EC Cal Mid does not exist:" << endl;
-    else *tracePort << "pH Cal Mid:" << AT_001.calibrateMid() <<  endl;
+    if (aIO_Type ==
+        i2c_ec) *debugOutputStream << "EC Cal Mid does not exist:" << endl;
+    else *debugOutputStream << "pH Cal Mid:" << AT_001.calibrateMid() <<  endl;
     break;
 
   case CALIBRATE_HIGH:
 
     if (aIO_Type ==
-        i2c_ec) *tracePort << "EC Cal High:" << AT_002.calibrateHigh() << endl;
-    else *tracePort << "pH Cal High:" << AT_001.calibrateHigh() << endl;
+        i2c_ec) *debugOutputStream << "EC Cal High:" << AT_002.calibrateHigh() <<
+        endl;
+    else *debugOutputStream << "pH Cal High:" << AT_001.calibrateHigh() << endl;
 
     break;
 
   case CALIBRATE_DRY:
 
     if (aIO_Type ==
-        i2c_ec) *tracePort << "EC Cal Dry:" << AT_002.calibrateDry() << endl;
-    else *tracePort << "pH Cal Dry does not exist." <<  endl;
+        i2c_ec) *debugOutputStream << "EC Cal Dry:" << AT_002.calibrateDry() <<
+        endl;
+    else *debugOutputStream << "pH Cal Dry does not exist." <<  endl;
     break;
 
   case CALIBRATE_CLEAR:
 
     if (aIO_Type ==
-        i2c_ec) *tracePort << "EC Cal Clear:" << AT_002.calibrateClear() << endl;
-    else *tracePort << "pH Cal Clear:" << AT_001.calibrateClear() << endl;
+        i2c_ec) *debugOutputStream << "EC Cal Clear:" <<
+        AT_002.calibrateClear() << endl;
+    else *debugOutputStream << "pH Cal Clear:" << AT_001.calibrateClear() << endl;
     break;
     break;
 
   case CALIBRATE_QUERY:
 
     if (aIO_Type ==
-        i2c_ec) *tracePort << "EC Points Calibrated:" <<
+        i2c_ec) *debugOutputStream << "EC Points Calibrated:" <<
         AT_002.calibrateQuery() <<
         endl;
-    else *tracePort << "pH Points Calibrated:" << AT_001.calibrateQuery() << endl;
+    else *debugOutputStream << "pH Points Calibrated:" <<
+        AT_001.calibrateQuery() << endl;
     break;
 
   default:
-    *tracePort << "Invalid command" << endl;
+    *debugOutputStream << "Invalid command" << endl;
     break;
   }
 }
 
 void processTerminalCommands()
 {
-  if (tracePort->available() > 1)
+  if (debugOutputStream->available() > 1)
   {
     // wait for at least two characters
-    char c = tracePort->read();
+    char c = debugOutputStream->read();
 
-    // *tracePort << c << endl;
+    // *debugOutputStream << c << endl;
     if (c == TIME_HEADER)
     {
       processTimeSetMessage();
@@ -2356,7 +2636,7 @@ void processTerminalCommands()
     else
     if (c == HELP_HEADER)
     {
-      tracePort->read();
+      debugOutputStream->read();
       showCommands();
     }
     else
@@ -2388,6 +2668,11 @@ void processTerminalCommands()
     if (c == FAN_HEADER)
     {
       processFanDurations();
+    }
+    else
+    if (c == CONTROLLER_XIC_001_HEADER)
+    {
+      processControllerMessage();
     }
     else
     if (c == CALIBRATE_EC_HEADER) processCalibrateMessage(i2c_ec);

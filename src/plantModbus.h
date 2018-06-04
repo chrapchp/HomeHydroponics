@@ -84,7 +84,19 @@
                                //  Current Value
 #define HR_PY_001_ONP_CV   44  // Circulation Pump 120VAC ON Period in sec
                                //  Current Value
-                               //
+#define HR_HS_001_HOA_CV   45        // Nutrient 1 Pump HOA (H=2,O=1,A=3)
+#define HR_HS_002_HOA_CV   46        // Nutrient 2 Pump  HOA (H=2,O=1,A=3)
+#define HR_HS_003_HOA_CV   47        // pH Down Pump  HOA (H=2,O=1,A=3)
+
+#define HR_AT_001_SP_CV   48        // pH Setpoint (pH * 10 )
+#define HR_AT_002_SP_CV   49        // EC Setpoint
+#define HR_AT_001_AV_CV   50        // pH volume (m) to dispense during auto for one  interval T
+#define HR_AT_001_AT_CV   51        // ph volume dispensed every T (s) during auto
+#define HR_AT_001_MV_CV   52        // pH volume (ml) to dispense during manual  (oneshot)
+#define HR_AT_002_AV_CV   53        // N1/N2  volume (ml) to dispense during auto for one  interval T
+#define HR_AT_002_AT_CV   54        // N1/N2 volume dispensed every T (s) during auto
+#define HR_AT_002_MV_CV   55        // N1/N2 volume (ml) to dispense during manual (oneshot)
+
 // Read Holding registers 32 bit
 #define HR_AT_001   80        // Nutrient pH
 #define HR_AT_001_TV   82        // pH Temperature Compensation Value
@@ -114,11 +126,19 @@
                                //  Setpoint
 #define HW_PY_001_ONP_SP   13  // Circulation Pump 120VAC ON Period in sec
                                //  Setpoint
-#define HW_XY_001_HOA   14        // Nutrient 1 Pump HOA (H=1,O=0,A=2)
-#define HW_XY_002_HOA   15        // Nutrient 2 Pump  HOA (H=1,O=0,A=2)
-#define HW_XY_003_HOA   16        // pH Down Pump  HOA (H=1,O=0,A=2)
+#define HW_HS_001_HOA   14        // pH Down Pump  HOA(H=2,O=1,A=3)
+#define HW_HS_002_HOA   15        // Nutrient 1 Pump  HOA(H=2,O=1,A=3)
+#define HW_HS_003_HOA   16        // Nutrient 2 Pump  HOA(H=2,O=1,A=3)
+
 #define HW_AT_001_SP   17        // pH Setpoint (pH * 10 )
 #define HW_AT_002_SP   18        // EC Setpoint
+#define HW_AT_001_AV   19        // pH volume (m) to dispense during auto for one  interval T
+#define HW_AT_001_AT   20        // ph volume dispensed every T (s) during auto
+#define HW_AT_001_MV   21        // pH volume (ml) to dispense during manual  (oneshot)
+#define HW_AT_002_AV   22        // N1/N2  volume (ml) to dispense during auto for one  interval T
+#define HW_AT_002_AT   23        // N1/N2 volume dispensed every T (s) during auto
+#define HW_AT_002_MV   24        // N1/N2 volume (ml) to dispense during manual (oneshot)
+
 
 //
 // Write holding registers 32 bits
