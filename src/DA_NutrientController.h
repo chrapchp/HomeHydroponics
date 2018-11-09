@@ -8,7 +8,7 @@
  *  @section DESCRIPTION
  *  Simple control for injecting nutrients into nutrient tank
  *  If in auto dispense X ml every T s
- *  If in manual dispense X ml over T s
+ *  If in manual dispense X ml
  *
  */
 
@@ -32,17 +32,21 @@ DA_NutrientController(uint8_t aPin, bool aActiveState, float aSP,CONTROL_TREND_T
 void          serialize(Stream *aOutputStream,
                         bool includeCR);
 
-
+// start off in Off with default values. if vals are not valid Controller
+// remains Off
 bool isValidControlParameters();
 
 inline CONTROL_MODE_TYPE getControlMode() {
         return controlMode;
 }
 
-
+// volumne to dispense V mL in auto
 void setAutoVolume( uint16_t aVolume);
+// interval between dispensing V mL during auto
 void setAutoInterval( uint16_t aEveryInterval);
+// combined two above functions
 void setAutoControlParameters( uint16_t aVolume, uint16_t aEveryInterval );
+// dispense V ml in auto. One shot.
 void setManualVolume( uint16_t aVolume );
 
 inline uint16_t getAutoVolume()
@@ -59,6 +63,7 @@ inline uint16_t getManualVolume()
   return manualVolume;
 }
 
+
 inline void setControlMode( CONTROL_MODE_TYPE aControlMode )
 {
         controlMode = aControlMode;
@@ -67,7 +72,7 @@ inline void setControlMode( CONTROL_MODE_TYPE aControlMode )
 
 void setControlMode( uint16_t aMode );
 
-
+// trend to control in auto. rising above SP or falling below SP
 inline void setTrendingMode( CONTROL_TREND_TYPE aControlTrend )
 {
         controlTrend = aControlTrend;

@@ -1272,7 +1272,10 @@ void do_ONP_SPoll()
 {
   float tLevel;
 
-  doLightControl(&growingChamberLights);
+  if( HS_103AB.getCurrentState() == DA_HOASwitch::Auto)
+    doLightControl(&growingChamberLights);
+
+if( HS_102AB.getCurrentState() == DA_HOASwitch::Auto)
   doLightControl(&seedingAreaLights);
 
   unsigned int distanceCM = LT_002.ping() / US_ROUNDTRIP_CM -
@@ -1315,6 +1318,7 @@ void doUpdateOutputs()
 
 void doGrowingChamberLightsOn()
 {
+
   DY_103.activate(); // if disabled, it won't activate
   // DY_103.activate(); // if disabled, it won't activate
 
@@ -1510,7 +1514,7 @@ void refreshModbusRegisters()
   modbusRegisters[HR_HS_002_HOA_CV] = XIC_002.getControlMode() + 1;
   modbusRegisters[HR_HS_003_HOA_CV] = XIC_003.getControlMode() + 1;
 
-  modbusRegisters[HR_AT_001_SP_CV] = (uint16_t)(XIC_001.getSP() * 10.0);
+//  modbusRegisters[HR_AT_001_SP_CV] = (uint16_t)(XIC_002.getSP() * 10.0);
   modbusRegisters[HR_AT_002_SP_CV] = (uint16_t)(XIC_002.getSP());
   modbusRegisters[HR_AT_001_AV_CV] =  XIC_001.getAutoVolume();
   modbusRegisters[HR_AT_001_AT_CV] = XIC_001.getAutoInterval();
