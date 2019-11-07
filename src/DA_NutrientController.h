@@ -18,14 +18,16 @@
 
 #define DA_NUTRIENTCONTROL_DEFAULT -127
 #define DA_NUTRIENTCONTROL_TIME_DEFAULT 0
-#define DA_NUTRIENTCONTROL_VOLUMNE_DEFAULT 0
+#define DA_NUTRIENTCONTROL_VOLUME_DEFAULT 0
 #define DA_NUTRIENTCONTROLLER_DEADBAND 0.05 // 5%
 
 
 class DA_NutrientController : public DA_PeristalticPump   {
 public:
 enum CONTROL_TREND_TYPE { RISINGTREND, FALLINGTREND };
-enum CONTROL_MODE_TYPE { COFF=0,  CMANUAL, CAUTO, CSTANDBY };
+
+
+enum CONTROL_MODE_TYPE { Unknown, Hand, Off, Auto  };
 
 DA_NutrientController(uint8_t aPin, bool aActiveState, float aSP,CONTROL_TREND_TYPE aControlTrend );
 
@@ -70,6 +72,8 @@ inline void setControlMode( CONTROL_MODE_TYPE aControlMode )
 }
 
 
+void setStopSetpoint( float aStopSetpoint );
+void setStopDeadband( float aStopDeadband );
 void setControlMode( uint16_t aMode );
 
 // trend to control in auto. rising above SP or falling below SP
@@ -100,15 +104,31 @@ bool refresh();
 
 private:
 
+  float getStopCondition();
 float pv;
 float sp;
+/**
+ *   spStop: when SP is met it will apply control until SP +/- spStop
+ *   spStop = 0 implies deadband control.
+ *   spStop = 0 and deadband = 0 is invalid for auto. will default to deadband at
+ *   DA_NUTRIENTCONTROLLER_DEADBAND
+ */
+float stopSetpoint;
+/**
+ * deadband : when SP is met it will apply control until SP +/ deadband * sp
+ *            deadband = 0 => deadband control not used. Assume spStop
+ */
+float stopDeadband;
+
 CONTROL_MODE_TYPE controlMode;
 CONTROL_MODE_TYPE prevControlMode;
 CONTROL_TREND_TYPE controlTrend;
 uint16_t autoVolume;
 uint16_t autoInterval;
+
 uint16_t manualVolume;
-bool processOutofBand;
+bool processOutofBand;     // true when process is out of band
+bool correctingOutofBand;  // true when in auto and correcting SP-PV error
 
 };
 

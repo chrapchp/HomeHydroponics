@@ -20,14 +20,16 @@ DA_NutrientController::DA_NutrientController(uint8_t            aPin,
                                              CONTROL_TREND_TYPE aControlTrend) :
   DA_PeristalticPump(aPin, aActiveState)
 {
-  sp               = aSP;
-  autoVolume       = DA_NUTRIENTCONTROL_VOLUMNE_DEFAULT;
-  autoInterval     = DA_NUTRIENTCONTROL_TIME_DEFAULT;
-  manualVolume     = DA_NUTRIENTCONTROL_VOLUMNE_DEFAULT;
-  controlTrend     = aControlTrend;
-  processOutofBand = false;
-  controlMode      = CONTROL_MODE_TYPE::COFF;
-  prevControlMode  = CONTROL_MODE_TYPE::COFF;
+  sp                  = aSP;
+  autoVolume          = DA_NUTRIENTCONTROL_VOLUME_DEFAULT;
+  autoInterval        = DA_NUTRIENTCONTROL_TIME_DEFAULT;
+  manualVolume        = DA_NUTRIENTCONTROL_VOLUME_DEFAULT;
+  controlTrend        = aControlTrend;
+  processOutofBand    = false;
+  controlMode         = CONTROL_MODE_TYPE::Off;
+  prevControlMode     = CONTROL_MODE_TYPE::Off;
+  stopDeadband        = DA_NUTRIENTCONTROLLER_DEADBAND;
+  correctingOutofBand = false;
   stop();
 }
 
@@ -37,64 +39,70 @@ void DA_NutrientController::serialize(Stream *aOutputStream,  bool includeCR)
     " autoVolume:" <<
     autoVolume;
   *aOutputStream << " autoIntervalsp:" << autoInterval << " manualVolume:" <<
-  manualVolume;
+    manualVolume;
   *aOutputStream << " controlMode:" << controlMode << " processOutofBand:" <<
     processOutofBand;
-  *aOutputStream << " pv:" << pv;
+  *aOutputStream << " pv:" << pv << " stopCondition:" << getStopCondition();
+  *aOutputStream << " stopSP:" << stopSetpoint << " stopDeadband:" <<
+  stopDeadband << " correctingOutofBand:" << correctingOutofBand << " isActive():" << isActive();
   *aOutputStream << endl;
 }
 
 bool DA_NutrientController::isValidControlParameters()
 {
-  return autoVolume != DA_NUTRIENTCONTROL_VOLUMNE_DEFAULT &&
-         manualVolume != DA_NUTRIENTCONTROL_VOLUMNE_DEFAULT &&
+  return autoVolume != DA_NUTRIENTCONTROL_VOLUME_DEFAULT &&
+         manualVolume != DA_NUTRIENTCONTROL_VOLUME_DEFAULT &&
          autoInterval != DA_NUTRIENTCONTROL_TIME_DEFAULT;
 }
 
 void DA_NutrientController::setControlMode(uint16_t aMode)
 {
-  if (aMode == 1) controlMode = COFF;
+  if (aMode == 3) controlMode = Auto;
   else if (aMode ==
-           2) controlMode = DA_NutrientController::CMANUAL;
-  else controlMode = DA_NutrientController::CAUTO;
+           1) controlMode = DA_NutrientController::Hand;
+  else controlMode = DA_NutrientController::Off;
 }
 
 bool DA_NutrientController::refresh()
 {
   switch (controlMode)
   {
-  case CONTROL_MODE_TYPE::CMANUAL:
+  case CONTROL_MODE_TYPE::Hand:
 
 
-    if (prevControlMode != CONTROL_MODE_TYPE::CMANUAL)
+    if (prevControlMode != CONTROL_MODE_TYPE::Hand)
     {
       dispenseVolume(
         manualVolume);
-    //  Serial << "Manual" << endl;
-      prevControlMode = CONTROL_MODE_TYPE::CMANUAL;
+
+      prevControlMode     = CONTROL_MODE_TYPE::Hand;
+      processOutofBand    = false;
+      correctingOutofBand = false;
     }
 
     break;
 
-  case CONTROL_MODE_TYPE::COFF:
+  case CONTROL_MODE_TYPE::Off:
 
-    //  Serial << "Off" << endl;
-    stop();
-    prevControlMode = CONTROL_MODE_TYPE::COFF;
+    if (prevControlMode != CONTROL_MODE_TYPE::Off)
+    {
+
+      stop();
+      prevControlMode     = CONTROL_MODE_TYPE::Off;
+      processOutofBand    = false;
+      correctingOutofBand = false;
+    }
     break;
 
-  case CONTROL_MODE_TYPE::CAUTO:
+  case CONTROL_MODE_TYPE::Auto:
     float tSP;
 
-    tSP = sp;
+    tSP             = sp;
+    prevControlMode = CONTROL_MODE_TYPE::Auto;
 
-    // if controlling PV then stop when were are +/-5% depending on control
-    // direction
     if (processOutofBand)
     {
-      if (controlTrend ==
-          RISINGTREND) tSP = sp * (1 - DA_NUTRIENTCONTROLLER_DEADBAND);
-      else tSP = sp * (1 + DA_NUTRIENTCONTROLLER_DEADBAND);
+      tSP = getStopCondition();
     }
 
     float delta;
@@ -108,26 +116,29 @@ bool DA_NutrientController::refresh()
     {
       processOutofBand = true;
 
-      if (prevControlMode != CONTROL_MODE_TYPE::CAUTO)
+      if (!correctingOutofBand)
       {
-        //Serial << "DispensEvery()" << endl;
-        dispenseVolumeEvery(
+       dispenseVolumeEvery(
           autoVolume,
-          autoInterval);
-        prevControlMode = CONTROL_MODE_TYPE::CAUTO;
+          autoInterval) ;
+
+        correctingOutofBand = true;
 
         // refresh();
       }
     }
     else
     {
-      processOutofBand = false;
-      prevControlMode  = CONTROL_MODE_TYPE::CSTANDBY;
+      processOutofBand    = false;
+      correctingOutofBand = false;
       stop();
+
     }
     break;
 
-  case CONTROL_MODE_TYPE::CSTANDBY:
+  case CONTROL_MODE_TYPE::Unknown:
+    processOutofBand    = false;
+    correctingOutofBand = false;
     break;
   }
   return DA_DiscreteOutputTmr::refresh();
@@ -156,4 +167,41 @@ void DA_NutrientController::setAutoControlParameters(uint16_t aVolume,
 void DA_NutrientController::setManualVolume(uint16_t aVolume)
 {
   if (aVolume > 0) manualVolume = aVolume;
+}
+
+void DA_NutrientController::setStopSetpoint(float aStopSetpoint)
+{
+  stopDeadband = 0.0f;
+  stopSetpoint = aStopSetpoint;
+}
+
+void DA_NutrientController::setStopDeadband(float aStopDeadband)
+{
+  stopSetpoint = 0.0f;
+  stopDeadband = aStopDeadband;
+}
+
+float DA_NutrientController::getStopCondition()
+{
+  float calcStopCondition;
+
+  // if an actual stop condition was provided, then it overides the deadband
+  // setting
+  if (stopSetpoint != 0) calcStopCondition = stopSetpoint;
+
+  // if no deadband or stopsetpoint use default deadband
+  else {
+    // check if the deadband is 0, then default to the defaut deadband.
+    // then compute the stop condition.
+    float tDeadBand = stopDeadband;
+
+    if (tDeadBand == 0.0f) tDeadBand = DA_NUTRIENTCONTROLLER_DEADBAND;
+
+    if (controlTrend ==
+        RISINGTREND) calcStopCondition = sp * (1 - tDeadBand);
+    else calcStopCondition = sp * (1 + tDeadBand);
+  }
+
+
+  return calcStopCondition;
 }

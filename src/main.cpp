@@ -41,6 +41,7 @@
 
 #include "PlantModbus.h"
 #include "DA_NutrientController.h"
+//#include "DA_NutrientController.h"
 #define DEFAULT_LIGHTS_ON_ALARM_TIME 1519992000       // AlarmHMS (5, 0, 0)
 #define DEFAULT_LIGHTS_OFF_ALARM_TIME 1520056800      // AlarmHMS (23, 0, 0)
 #define DEFAULT_HEATING_PAD_ON_TIME 1542034800        // AlarmHMS (8, 0, 0)
@@ -52,15 +53,17 @@
 #define DEFAULT_FAN_ON_DURATION 30 * 60               // 30 min * 60 s
 #define DEFAULT_FAN_OFF_DURATION 30 * 60              // 30 min * 60 s
 
-#define DEFAULT_PH_AUTO_VOLUME 10                     // ml
+#define DEFAULT_PH_AUTO_VOLUME 5                      // ml
 #define DEFAULT_PH_AUTO_INTERVAL 60                   // s
-#define DEFAULT_PH_MANUAL_VOLUME 10                   // ml
+#define DEFAULT_PH_MANUAL_VOLUME 5                    // ml
+
+
 #define DEFAULT_N1N2_AUTO_VOLUME 10                   // ml
 #define DEFAULT_N1N2_AUTO_INTERVAL 60                 // s
 #define DEFAULT_N1N2_MANUAL_VOLUME 25                 // ml
 #define DEFAULT_PH_SETPOINT 60                        // * 10
 #define DEFAULT_EC_SETPOINT 1100                      // uS/cm
-#define DEFAULT_XIC_MODE 0                            // off
+#define DEFAULT_XIC_MODE 2                            // off
 
 #define STRLEN(s) (sizeof(s) / sizeof(s[0]))
 
@@ -109,12 +112,12 @@ const uint32_t DEFAULT_TIME = 1000188000;
   EEPROM_PH_MANUAL_VOL_ADDR + sizeof(uint16_t)
 #define EEPROM_N1N2_MODE_ADDR \
   EEPROM_N1N2_AUTO_INTERVAL_ADDR + sizeof(uint16_t)
-#define EEPROM_PH_MODE_ADDR \
+#define EEPROM_PH_DOWN_HOA_ADDR \
   EEPROM_N1N2_MODE_ADDR + sizeof(uint16_t)
 
 // Circ pump
 #define EEPROM_HS_001HOA_ADDR \
-  EEPROM_PH_MODE_ADDR + sizeof(uint16_t)
+  EEPROM_PH_DOWN_HOA_ADDR + sizeof(uint16_t)
 
 // fan pump
 #define EEPROM_HS_101HOA_ADDR \
@@ -145,7 +148,7 @@ const uint32_t DEFAULT_TIME = 1000188000;
 // comment out to not include terminal processing
 // #define PROCESS_TERMINAL
 // #define PROCESS_TERMINAL_VERBOSE
-Stream *debugOutputStream = &Serial;
+Stream *debugOutputStream = &Serial3;
 
 // #define PROCESS_MODBUS
 
@@ -260,6 +263,9 @@ void     on_Fan_Process(DA_HOASwitch::HOADetectType state);
 void     on_InletValve_Process(bool state,
                                int  aPin);
 void     on_SeedingAreaLED_Process(DA_HOASwitch::HOADetectType state);
+void     on_pHDownProcess( DA_HOASwitch::HOADetectType state);
+void on_AeratorProcess( DA_HOASwitch::HOADetectType state );
+
 void     onAtlasECSample(IO_TYPE type,
                          float   value);
 void     onAtlasPhSample(IO_TYPE type,
@@ -300,7 +306,7 @@ void     writeModbusCoil(uint8_t startAddress,
                          uint8_t bitPos,
                          bool    value);
 
-
+void on_AeratorProcess();
 #ifdef PROCESS_TERMINAL
 void processTerminalCommands();
 void processCalibrateMessage(IO_TYPE aIO_Type);
@@ -505,23 +511,21 @@ DA_HOASwitch HS_104AB = DA_HOASwitch();
 // Fan HOA (remote only)
 DA_HOASwitch HS_101AB = DA_HOASwitch();
 
-// pH Down Pump Controller
-DA_NutrientController XIC_001 = DA_NutrientController(45,
-                                                      HIGH,
-                                                      6,
+// pH Down Pump HOA (remote only)
+DA_HOASwitch HS_011 = DA_HOASwitch() ;
+
+// Aerator HOA (remote only)
+DA_HOASwitch HS_201 = DA_HOASwitch() ;
+
+DA_NutrientController XIC_001  = DA_NutrientController(45, HIGH,   6.5,
                                                       DA_NutrientController::RISINGTREND);
 
+
 // Nutrient 1 Pump Controller
-DA_NutrientController XIC_002 = DA_NutrientController(46,
-                                                      HIGH,
-                                                      1100,
-                                                      DA_NutrientController::FALLINGTREND);
+//DA_NutrientController XIC_002 = DA_NutrientController(46, HIGH,
 
 // Nutrient 2 Pump Controller
-DA_NutrientController XIC_003 = DA_NutrientController(47,
-                                                      HIGH,
-                                                      1100,
-                                                      DA_NutrientController::FALLINGTREND);
+//DA_NutrientController XIC_003 = DA_NutrientController(47,
 
 // Hydrogen Peroxide Pump
 // DA_PeristalticPump XY_004 = DA_PeristalticPump(47, HIGH);
@@ -570,7 +574,7 @@ DA_NonBlockingDelay KI_003 = DA_NonBlockingDelay(TEMPERATURE_COMPENSATE_CYCLE,
 void setup()
 {
 #ifdef PROCESS_TERMINAL
-  Serial.begin(9600);
+  Serial3.begin(9600);
 #endif // ifdef PROCESS_TERMINAL
 
 #ifdef PROCESS_MODBUS
@@ -619,6 +623,10 @@ void setup()
 
   HS_104AB.setOnStateChangeDetect(&on_HeatingPad_Process);
 
+  HS_011.setOnStateChangeDetect(&on_pHDownProcess);
+
+  HS_201.setOnStateChangeDetect(&on_AeratorProcess);
+
 
   AT_001.setOnPollCallBack(onAtlasPhSample);
   AT_001.setPollingInterval(3000);
@@ -634,7 +642,7 @@ void setup()
   // XIC_003.serialize(debugOutputStream, true);
   XIC_001.setMaxFlowRate(27); // pH pump runs slower than the other two for some
                               // reason
-  // XIX_001.setAutoControlParameters(10, 60);
+   XIC_001.setAutoControlParameters(10, 120);
   // 1-wire
   sensors.begin();
   initOneWire();
@@ -669,10 +677,14 @@ void setup()
     EEPROMWriteDefaultConfig();
     EEPROMLoadConfig();
   }
+
+
 }
 
 void loop()
 {
+
+
 #ifdef PROCESS_MODBUS
 
  slave.poll(modbusRegisters, MODBUS_REG_COUNT);
@@ -688,13 +700,6 @@ void loop()
   refreshDiscreteInputs();
   refreshDiscreteOutputs();
 
-  XIC_001.setPV(AT_001.getSample());
-  XIC_001.refresh();
-  XIC_002.setPV(AT_002.getSample());
-  XIC_002.refresh();
-  XIC_003.setPV(AT_002.getSample());
-  XIC_003.refresh();
-
   if (currentIOType == i2c_ph)
   {
     AT_001.refresh();
@@ -708,6 +713,10 @@ void loop()
   KI_002.refresh();
   KI_003.refresh();
 
+  #ifndef PROCESS_TERMINAL
+  XIC_001.setPV(AT_001.getSample());
+  #endif
+  XIC_001.refresh();
 }
 
 void onFT_002_PulseIn()
@@ -850,6 +859,44 @@ void on_HeatingPad_Process(DA_HOASwitch::HOADetectType state)
   }
 }
 
+
+void on_AeratorProcess( DA_HOASwitch::HOADetectType state )
+{
+  #ifdef PROCESS_TERMINAL_VERBOSE
+  *debugOutputStream << "on_AeratorProcess HS_201" << endl;
+  HS_201.serialize(debugOutputStream, true);
+  #endif // ifdef PROCESS_TERMINAL_VERBOSE
+
+  switch (state)
+  {
+  case DA_HOASwitch::Hand:
+
+    MY_101.pauseTimer();
+    MY_101.disable();
+    MY_101.forceActive(); // force the fan on
+
+
+    break;
+
+  case DA_HOASwitch::Off:
+    MY_101.pauseTimer();
+    MY_101.disable();
+
+    break;
+
+  case DA_HOASwitch::Auto:
+    MY_101.enable();
+    MY_101.resumeTimer();
+
+    // PY_001.restart();
+    // PY_001.resume();
+    break;
+
+  default:
+    break;
+  }
+}
+
 void on_Fan_Process(DA_HOASwitch::HOADetectType state)
 {
   #ifdef PROCESS_TERMINAL_VERBOSE
@@ -939,6 +986,16 @@ void on_SeedingAreaLED_Process(DA_HOASwitch::HOADetectType state)
   default:
     break;
   }
+}
+
+void on_pHDownProcess(DA_HOASwitch::HOADetectType state)
+{
+  #ifdef PROCESS_TERMINAL
+  *debugOutputStream << "on_pHDownProcess HS_011" << endl;
+  HS_011.serialize(debugOutputStream, true);
+  #endif // ifdef PROCESS_TERMINAL_VERBOSE
+  XIC_001.setControlMode(HS_011.getCurrentState());
+
 }
 
 void setupRTC()
@@ -1326,6 +1383,7 @@ void refreshDiscreteInputs()
   HS_102AB.refresh();
   HS_103AB.refresh();
   HS_104AB.refresh();
+  HS_011.refresh();
 }
 
 void refreshDiscreteOutputs()
@@ -1709,18 +1767,13 @@ modbusRegisters[HR_HS_102_HOA_CV] = HS_102AB.getCurrentState();
   modbusRegisters[HR_AT_002_TV]     = bfconvert.regsf[0];
   modbusRegisters[HR_AT_002_TV + 1] = bfconvert.regsf[1];
 
-  modbusRegisters[HR_HS_001_HOA_CV] = XIC_001.getControlMode() + 1;
-  modbusRegisters[HR_HS_002_HOA_CV] = XIC_002.getControlMode() + 1;
-  modbusRegisters[HR_HS_003_HOA_CV] = XIC_003.getControlMode() + 1;
 
-  //  modbusRegisters[HR_AT_001_SP_CV] = (uint16_t)(XIC_002.getSP() * 10.0);
-  modbusRegisters[HR_AT_002_SP_CV] = (uint16_t)(XIC_002.getSP());
-  modbusRegisters[HR_AT_001_AV_CV] =  XIC_001.getAutoVolume();
-  modbusRegisters[HR_AT_001_AT_CV] = XIC_001.getAutoInterval();
-  modbusRegisters[HR_AT_001_MV_CV] = XIC_001.getManualVolume();
-  modbusRegisters[HR_AT_002_AV_CV] = XIC_002.getAutoVolume();
-  modbusRegisters[HR_AT_002_AT_CV] = XIC_002.getAutoInterval();
-  modbusRegisters[HR_AT_002_MV_CV] = XIC_002.getManualVolume();
+  // XIC-001
+  modbusRegisters[HR_AT_001_SP_CV] = (uint16_t) (XIC_001.getSP() * 10); // pH Setpoint (pH * 10 )
+  modbusRegisters[HR_AT_011_AV_CV] = XIC_001.getAutoVolume();      // pH volume (ml)
+  modbusRegisters[HR_AT_011_AT_CV]  = XIC_001.getAutoInterval();    // ph volume dispensed every T (s) during auto
+  modbusRegisters[HR_AT_011_MV_CV] = XIC_001.getManualVolume();     // manual volume (ml)
+
 }
 
 void setModbusTime()
@@ -2008,94 +2061,86 @@ void processModbusXICCommands()
   // set and persist EC setpoint
   if (modbusRegisters[HW_AT_002_SP] != 0)
   {
-    XIC_002.setSP(modbusRegisters[HW_AT_002_SP]);
-    XIC_003.setSP(modbusRegisters[HW_AT_002_SP]);
-    EEPROMWriteUint16(modbusRegisters[HW_AT_002_SP],
-                      EEPROM_EC_SETPOINT_ADDR);
+    //XIC_002.setSP(modbusRegisters[HW_AT_002_SP]);
+    //XIC_003.setSP(modbusRegisters[HW_AT_002_SP]);
+    //EEPROMWriteUint16(modbusRegisters[HW_AT_002_SP],
+      //                EEPROM_EC_SETPOINT_ADDR);
     modbusRegisters[HW_AT_002_SP] = 0;
   }
 
   // pH Auto Volume
-  if (modbusRegisters[HW_AT_001_AV] != 0)
+  if (modbusRegisters[HW_AT_011_AV] != 0)
   {
-    XIC_001.setAutoVolume(modbusRegisters[HW_AT_001_AV]);
+    XIC_001.setAutoVolume(modbusRegisters[HW_AT_011_AV]);
 
-    EEPROMWriteUint16(modbusRegisters[HW_AT_001_AV],
+    EEPROMWriteUint16(modbusRegisters[HW_AT_011_AV],
                       EEPROM_PH_AUTO_VOL_ADDR);
-    modbusRegisters[HW_AT_001_AV] = 0;
+    modbusRegisters[HW_AT_011_AV] = 0;
   }
 
   // pH Down Auto Interval
-  if (modbusRegisters[HW_AT_001_AT] != 0)
+  if (modbusRegisters[HW_AT_011_AT] != 0)
   {
-    XIC_001.setAutoInterval(modbusRegisters[HW_AT_001_AT]);
+    XIC_001.setAutoInterval(modbusRegisters[HW_AT_011_AT]);
 
-    EEPROMWriteUint16(modbusRegisters[HW_AT_001_AT],
+    EEPROMWriteUint16(modbusRegisters[HW_AT_011_AT],
                       EEPROM_PH_AUTO_INTERVAL_ADDR);
-    modbusRegisters[HW_AT_001_AT] = 0;
+    modbusRegisters[HW_AT_011_AT] = 0;
   }
 
   // pH Down Manual Volume
-  if (modbusRegisters[HW_AT_001_MV] != 0)
+  if (modbusRegisters[HW_AT_011_MV] != 0)
   {
-    XIC_001.setManualVolume(modbusRegisters[HW_AT_001_MV]);
+    XIC_001.setManualVolume(modbusRegisters[HW_AT_011_MV]);
 
-    EEPROMWriteUint16(modbusRegisters[HW_AT_001_MV],
+    EEPROMWriteUint16(modbusRegisters[HW_AT_011_MV],
                       EEPROM_PH_MANUAL_VOL_ADDR);
-    modbusRegisters[HW_AT_001_MV] = 0;
+    modbusRegisters[HW_AT_011_MV] = 0;
   }
 
 
-  // ph Down HOA
-  if (modbusRegisters[HW_HS_001_HOA_SP] != 0)
-  {
-    XIC_001.setControlMode(modbusRegisters[HW_HS_001_HOA_SP]);
 
-    EEPROMWriteUint16(modbusRegisters[HW_HS_001_HOA_SP],
-                      EEPROM_PH_MODE_ADDR);
-    modbusRegisters[HW_HS_001_HOA_SP] = 0;
-  }
 
   // N1/N2 auto Volume
   if (modbusRegisters[HW_AT_002_AV] != 0)
   {
-    XIC_002.setAutoVolume(modbusRegisters[HW_AT_002_AV]);
-    XIC_003.setAutoVolume(modbusRegisters[HW_AT_002_AV]);
-    EEPROMWriteUint16(modbusRegisters[HW_AT_002_AV],
-                      EEPROM_N1N2_AUTO_VOL_ADDR);
-    modbusRegisters[HW_AT_002_AV] = 0;
+  //  XIC_002.setAutoVolume(modbusRegisters[HW_AT_002_AV]);
+  //  XIC_003.setAutoVolume(modbusRegisters[HW_AT_002_AV]);
+  //  EEPROMWriteUint16(modbusRegisters[HW_AT_002_AV],
+  //                    EEPROM_N1N2_AUTO_VOL_ADDR);
+  //  modbusRegisters[HW_AT_002_AV] = 0;
   }
 
   // N1/N2 auto Interval
   if (modbusRegisters[HW_AT_002_AT] != 0)
   {
-    XIC_002.setAutoInterval(modbusRegisters[HW_AT_002_AT]);
-    XIC_003.setAutoInterval(modbusRegisters[HW_AT_002_AT]);
-    EEPROMWriteUint16(modbusRegisters[HW_AT_002_AT],
-                      EEPROM_N1N2_AUTO_INTERVAL_ADDR);
-    modbusRegisters[HW_AT_002_AT] = 0;
+  //  XIC_002.setAutoInterval(modbusRegisters[HW_AT_002_AT]);
+  //  XIC_003.setAutoInterval(modbusRegisters[HW_AT_002_AT]);
+  //  EEPROMWriteUint16(modbusRegisters[HW_AT_002_AT],
+  //                    EEPROM_N1N2_AUTO_INTERVAL_ADDR);
+  //  modbusRegisters[HW_AT_002_AT] = 0;
   }
 
   // N1/N2 Manual Volume
   if (modbusRegisters[HW_AT_002_MV] != 0)
   {
-    XIC_002.setManualVolume(modbusRegisters[HW_AT_002_MV]);
-    XIC_003.setManualVolume(modbusRegisters[HW_AT_002_MV]);
+  //  XIC_002.setManualVolume(modbusRegisters[HW_AT_002_MV]);
+  //  XIC_003.setManualVolume(modbusRegisters[HW_AT_002_MV]);
 
-    EEPROMWriteUint16(modbusRegisters[HW_AT_002_MV],
-                      EEPROM_N1N2_MANUAL_VOL_ADDR);
+  //  EEPROMWriteUint16(modbusRegisters[HW_AT_002_MV],
+  //                    EEPROM_N1N2_MANUAL_VOL_ADDR);
     modbusRegisters[HW_AT_002_MV] = 0;
   }
 
   // N1/N2 Manual HOA
-  if (modbusRegisters[HW_HS_002_HOA_SP] != 0)
+  if (modbusRegisters[HW_HS_012_HOA_SP] != 0)
   {
-    XIC_002.setControlMode(modbusRegisters[HW_HS_002_HOA_SP]);
-    XIC_003.setControlMode(modbusRegisters[HW_HS_002_HOA_SP]);
+  //  XIC_002.setControlMode(modbusRegisters[HW_HS_012_HOA_SP]);
+  //  XIC_003.setControlMode(modbusRegisters[HW_HS_012_HOA_SP]);
 
-    EEPROMWriteUint16(modbusRegisters[HW_HS_002_HOA_SP],
-                      EEPROM_N1N2_MODE_ADDR);
-    modbusRegisters[HW_HS_002_HOA_SP] = 0;
+  //  EEPROMWriteUint16(modbusRegisters[HW_HS_012_HOA_SP],
+  //                    EEPROM_N1N2_MODE_ADDR);
+    modbusRegisters[HW_HS_012_HOA_SP] = 0;
   }
 }
 
@@ -2176,6 +2221,17 @@ void processModbusRemoteHOAs()
     EEPROMWriteUint16(modbusRegisters[HW_HS_104HOA_SP],
                       EEPROM_HS_104HOA_ADDR);
   } else modbusRegisters[HW_HS_104HOA_SP] = HS_104AB.getCurrentState();
+
+  // ph Down HOA
+
+  if (HS_011.setRemoteState(modbusRegisters[HW_HS_011_HOA_SP]))
+  {
+
+
+    EEPROMWriteUint16(modbusRegisters[HW_HS_011_HOA_SP],
+                      EEPROM_PH_DOWN_HOA_ADDR);
+  } else  modbusRegisters[HW_HS_011_HOA_SP] = HS_011.getCurrentState();
+
 }
 
 /*
@@ -2226,7 +2282,7 @@ void EEPROMWriteDefaultConfig()
   EEPROMWriteUint16(DEFAULT_N1N2_MANUAL_VOLUME, EEPROM_N1N2_MANUAL_VOL_ADDR);
   EEPROMWriteUint16(DEFAULT_EC_SETPOINT,        EEPROM_EC_SETPOINT_ADDR);
   EEPROMWriteUint16(DEFAULT_PH_SETPOINT,        EEPROM_PH_SETPOINT_ADDR);
-  EEPROMWriteUint16(DEFAULT_XIC_MODE,           EEPROM_PH_MODE_ADDR);
+  EEPROMWriteUint16(DEFAULT_XIC_MODE,           EEPROM_PH_DOWN_HOA_ADDR);
   EEPROMWriteUint16(DEFAULT_XIC_MODE,           EEPROM_N1N2_MODE_ADDR);
   EEPROMWriteUint16(DEFAULT_XIC_MODE,           EEPROM_HS_001HOA_ADDR);
   EEPROMWriteUint16(DEFAULT_XIC_MODE,           EEPROM_HS_101HOA_ADDR);
@@ -2316,25 +2372,27 @@ void EEPROMLoadConfig()
   XIC_001.setAutoVolume(EEPROMReadUint16(EEPROM_PH_AUTO_VOL_ADDR));
   XIC_001.setAutoInterval(EEPROMReadUint16(EEPROM_PH_AUTO_INTERVAL_ADDR));
   XIC_001.setManualVolume(EEPROMReadUint16(EEPROM_PH_MANUAL_VOL_ADDR));
-  XIC_001.setControlMode(EEPROMReadUint16(EEPROM_PH_MODE_ADDR));
+  XIC_001.setControlMode(EEPROMReadUint16(EEPROM_PH_DOWN_HOA_ADDR));
 
-  XIC_002.setAutoVolume(EEPROMReadUint16(EEPROM_N1N2_AUTO_VOL_ADDR));
-  XIC_002.setAutoInterval(EEPROMReadUint16(EEPROM_N1N2_AUTO_INTERVAL_ADDR));
-  XIC_002.setManualVolume(EEPROMReadUint16(EEPROM_N1N2_MANUAL_VOL_ADDR));
-  XIC_002.setControlMode(EEPROMReadUint16(EEPROM_N1N2_MODE_ADDR));
-  XIC_002.setSP(EEPROMReadUint16(EEPROM_EC_SETPOINT_ADDR));
+//  XIC_002.setAutoVolume(EEPROMReadUint16(EEPROM_N1N2_AUTO_VOL_ADDR));
+//  XIC_002.setAutoInterval(EEPROMReadUint16(EEPROM_N1N2_AUTO_INTERVAL_ADDR));
+//  XIC_002.setManualVolume(EEPROMReadUint16(EEPROM_N1N2_MANUAL_VOL_ADDR));
+//  XIC_002.setControlMode(EEPROMReadUint16(EEPROM_N1N2_MODE_ADDR));
+//  XIC_002.setSP(EEPROMReadUint16(EEPROM_EC_SETPOINT_ADDR));
 
-  XIC_003.setAutoVolume(EEPROMReadUint16(EEPROM_N1N2_AUTO_VOL_ADDR));
-  XIC_003.setAutoInterval(EEPROMReadUint16(EEPROM_N1N2_AUTO_INTERVAL_ADDR));
-  XIC_003.setManualVolume(EEPROMReadUint16(EEPROM_N1N2_MANUAL_VOL_ADDR));
-  XIC_003.setControlMode(EEPROMReadUint16(EEPROM_N1N2_MODE_ADDR));
-  XIC_003.setSP(EEPROMReadUint16(EEPROM_EC_SETPOINT_ADDR));
+//  XIC_003.setAutoVolume(EEPROMReadUint16(EEPROM_N1N2_AUTO_VOL_ADDR));
+//  XIC_003.setAutoInterval(EEPROMReadUint16(EEPROM_N1N2_AUTO_INTERVAL_ADDR));
+//  XIC_003.setManualVolume(EEPROMReadUint16(EEPROM_N1N2_MANUAL_VOL_ADDR));
+//  XIC_003.setControlMode(EEPROMReadUint16(EEPROM_N1N2_MODE_ADDR));
+//  XIC_003.setSP(EEPROMReadUint16(EEPROM_EC_SETPOINT_ADDR));
 
   HS_105AB.setRemoteState(EEPROMReadUint16(EEPROM_HS_001HOA_ADDR));
   HS_101AB.setRemoteState(EEPROMReadUint16(EEPROM_HS_101HOA_ADDR));
   HS_102AB.setRemoteState(EEPROMReadUint16(EEPROM_HS_102HOA_ADDR));
   HS_103AB.setRemoteState(EEPROMReadUint16(EEPROM_HS_103HOA_ADDR));
   HS_104AB.setRemoteState(EEPROMReadUint16(EEPROM_HS_104HOA_ADDR));
+
+  HS_011.setRemoteState(EEPROMReadUint16(EEPROM_PH_DOWN_HOA_ADDR));
 }
 
 #ifdef PROCESS_TERMINAL
@@ -2394,7 +2452,9 @@ void EEPROMLoadConfig()
 # define CONTROLLER_XIC_001_SP 's' // set point
 # define CONTROLLER_XIC_001_TM 't' // trend mode
 # define CONTROLLER_XIC_001_CM 'm' // control mode
-
+# define CONTROLLER_XIC_001_SC 'c' // stop condition
+# define CONTROLLER_XIC_001_DB 'd' // stop deadband
+# define CONTROLLER_XIC_001_REFRESH 'r' // refresh controller
 
 void displayEventControlEntry(char const *who, time_t anEpoch)
 {
@@ -2663,10 +2723,13 @@ void showCommands()
 
   *debugOutputStream << F("Xs9999999 - set XIC SP") << endl;
   *debugOutputStream << F("Xp9999999 - set XIC PV") << endl;
-  *debugOutputStream << F("Xm0|1|2   - set XIC MODE 0=OFF, 1=AUTO, 2=MANUAL") <<
+  *debugOutputStream << F("Xc9999999 - set XIC StopCond") << endl;
+  *debugOutputStream << F("Xm1|2|3   - set XIC MODE 1=OFF, 2=HAND, 3=AUTO") <<
     endl;
   *debugOutputStream << F(
     "Xt0|1   - set XIC trend type 0=trendinup, 1=trendingdown") << endl;
+    *debugOutputStream << F("Xr  - Refresh Controller") <<
+      endl;
 
 
   *debugOutputStream <<
@@ -2755,21 +2818,41 @@ void processControllerMessage()
     XIC_001.setSP(y);
     break;
 
+    case CONTROLLER_XIC_001_SC:
+      y = debugOutputStream->parseFloat();
+      XIC_001.setStopSetpoint(y);
+      break;
+
+    case CONTROLLER_XIC_001_DB:
+        y = debugOutputStream->parseFloat();
+        XIC_001.setStopDeadband(y);
+        break;
+
+    case CONTROLLER_XIC_001_REFRESH:
+            XIC_001.refresh();
+            XIC_001.serialize(debugOutputStream, true);
+            break;
+
   case CONTROLLER_XIC_001_CM:
     x = debugOutputStream->parseInt();
+    XIC_001.serialize(debugOutputStream, true);
 
-    if (x == 0) XIC_001.setControlMode(DA_NutrientController::COFF);
-    else if (x == 1) XIC_001.setControlMode(DA_NutrientController::CAUTO);
-    else XIC_001.setControlMode(DA_NutrientController::CMANUAL);
+
+    if (x == 1) XIC_001.setControlMode(DA_NutrientController::Hand);
+    else if (x == 2) XIC_001.setControlMode(DA_NutrientController::Off);
+    else XIC_001.setControlMode(DA_NutrientController::Auto);
+
     break;
 
   case CONTROLLER_XIC_001_TM:
+
     x = debugOutputStream->parseInt();
 
     if (x == 0) XIC_001.setTrendingMode(DA_NutrientController::RISINGTREND);
     else XIC_001.setTrendingMode(DA_NutrientController::FALLINGTREND);
+
     break;
-    break;
+
 
   default:
     *debugOutputStream << "invalid controller command" << endl;

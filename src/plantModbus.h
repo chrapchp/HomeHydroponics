@@ -26,7 +26,7 @@
 // #define HOLDING_REGISTER_READ_OFFSET 10		// start read holding
 // regisers
 // #define HOLDING_REGISTER_WRITE_OFFSET 30
-#define MODBUS_REG_COUNT 140
+#define MODBUS_REG_COUNT 150
 
 // read coils
 #define CS_HS_001   0          // Drain Pump Hand status : Start/Stop
@@ -91,19 +91,21 @@
 #define HR_MY_101_ONP_CV   42        // Fan  120VAC ON Period in sec  Current Value
 #define HR_PY_001_OFP_CV   43        // Circulation Pump 120VAC OFF Period in sec  Current Value
 #define HR_PY_001_ONP_CV   44        // Circulation Pump 120VAC ON Period in sec  Current Value
-#define HR_HS_001_HOA_CV   45        // Nutrient 1 Pump HOA (H=2,O=1,A=3)
-#define HR_HS_002_HOA_CV   46        // Nutrient 2 Pump  HOA (H=2,O=1,A=3)
-#define HR_HS_003_HOA_CV   47        // pH Down Pump  HOA (H=2,O=1,A=3)
+#define HR_SPARE1  45        // Nutrient 1 Pump HOA (H=2,O=1,A=3)
+#define HR_SPARE2   46        // Nutrient 2 Pump  HOA (H=2,O=1,A=3)
+#define HR_SPARE3  47        // pH Down Pump  HOA (H=2,O=1,A=3)
 #define HR_AT_001_SP_CV   48        // pH Setpoint (pH * 10 )
 #define HR_AT_002_SP_CV   49        // EC Setpoint
-#define HR_AT_001_AV_CV   50        // pH volume (m) to dispense during auto for one  interval T
-#define HR_AT_001_AT_CV   51        // ph volume dispensed every T (s) during auto
-#define HR_AT_001_MV_CV   52        // pH volume (ml) to dispense during manual  (oneshot)
+#define HR_AT_011_AV_CV   50        // pH volume (m) to dispense during auto for one  interval T
+#define HR_AT_011_AT_CV   51        // ph volume dispensed every T (s) during auto
+#define HR_AT_011_MV_CV   52        // pH volume (ml) to dispense during manual  (oneshot)
 #define HR_AT_002_AV_CV   53        // N1/N2  volume (ml) to dispense during auto for one  interval T
 #define HR_AT_002_AT_CV   54        // N1/N2 volume dispensed every T (s) during auto
 #define HR_AT_002_MV_CV   55        // N1/N2 volume (ml) to dispense during manual (oneshot)
-#define HR_Spare   56        // Spare
-
+#define HR_MY_201_OFP_SP   56       // Tank Aerator Off Period in sec  current value
+#define HR_MY_201_ONP_SP   57       // Tank Aerator On Period in sec  current value
+#define HR_SPARE4 58       // Tank Aerator On Period
+#define HA_SPARE5  59        // Spare
 
 
 
@@ -139,14 +141,14 @@
 #define HW_MY_101_ONP_SP   11        // Fan  120VAC ON Period in sec  Setpoint
 #define HW_PY_001_OFP_SP   12        // Circulation Pump 120VAC OFF Period in sec  Setpoint
 #define HW_PY_001_ONP_SP   13        // Circulation Pump 120VAC ON Period in sec  Setpoint
-#define HW_HS_001_HOA_SP   14        // pH Down Pump  HOA(H=2,O=1,A=3) from HMI
-#define HW_HS_002_HOA_SP   15        // Nutrient 1 Pump  HOA(H=2,O=1,A=3) from HMI
-#define HW_HS_003_HOA_SP   16        // Nutrient 2 Pump  HOA(H=2,O=1,A=3) from HMI
+#define HW_HS_011_HOA_SP   14        // pH Down Pump  HOA(H=1,O=2,A=3) from HMI
+#define HW_HS_012_HOA_SP   15        // Nutrient 1 Pump  HOA(H=1,O=2,A=3) from HMI
+#define HW_HS_013_HOA_SP   16        // Nutrient 2 Pump  HOA(H=1,O=2,A=3) from HMI
 #define HW_AT_001_SP   17        // pH Setpoint (pH * 10 )
 #define HW_AT_002_SP   18        // EC Setpoint
-#define HW_AT_001_AV   19        // pH volume (m) to dispense during auto for one  interval T
-#define HW_AT_001_AT   20        // ph volume dispensed every T (s) during auto
-#define HW_AT_001_MV   21        // pH volume (ml) to dispense during manual  (oneshot)
+#define HW_AT_011_AV   19        // pH volume (m) to dispense during auto for one  interval T
+#define HW_AT_011_AT   20        // ph volume dispensed every T (s) during auto
+#define HW_AT_011_MV   21        // pH volume (ml) to dispense during manual  (oneshot)
 #define HW_AT_002_AV   22        // N1/N2  volume (ml) to dispense during auto for one  interval T
 #define HW_AT_002_AT   23        // N1/N2 volume dispensed every T (s) during auto
 #define HW_AT_002_MV   24        // N1/N2 volume (ml) to dispense during manual (oneshot)
@@ -156,7 +158,10 @@
 #define HW_HS_103HOA_SP   28        // Growing Chamber  Light HOA  (H=1, O=2, A=3)  from HMI
 #define HW_HS_104HOA_SP   29        // Seeding Area Heating Pad HOA  (H=1, O=2, A=3)  from HMI
 
-
+// 16 be writes
+#define HW_MY_201_OFP_SP   150        // Nutrutriant Tank Aerator Off Period in sec  Setpoint
+#define HW_MY_201_ONP_SP   151        // Nutrutriant Tank Aerator On Period in sec  Setpoint
+#define HW_MY_201_HOA_SP   151        // Nutrutriant Tank Aerator On Period in sec  Setpoint
 
 
 //
