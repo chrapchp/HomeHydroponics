@@ -104,8 +104,8 @@
 #define HR_AT_002_MV_CV   55        // N1/N2 volume (ml) to dispense during manual (oneshot)
 #define HR_MY_201_OFP_SP   56       // Tank Aerator Off Period in sec  current value
 #define HR_MY_201_ONP_SP   57       // Tank Aerator On Period in sec  current value
-#define HR_SPARE4 58       // Tank Aerator On Period
-#define HA_SPARE5  59        // Spare
+#define HR_SPARE5 58       // Tank Aerator On Period
+#define HR_SPARE6  59        // Spare
 
 
 
@@ -170,7 +170,7 @@
 #define HW_DY_102_ONT_SP   62        // Seeding Area Chamber LED ON Time (UNIX EPOCH) Setpoint  Local Time
 #define HW_DY_103_OFT_SP   64        // Growing Chamber LED OFF Time  (UNIX EPOCH)  Setpoint  Local Time
 #define HW_DY_103_ONT_SP   66        // Growing Chamber LED ON Time (UNIX EPOCH)  Setpoint  Local Time
-#define HW_QT_001_SP   68        // Realt-time clock time (UNIX EPOCH)  Setpoint UTC
+#define HW_QT_001_SP       68        // Realt-time clock time (UNIX EPOCH)  Setpoint UTC
 #define HW_DY_104_OFT_SP   70        // Seeding Area Heating Pad OFF Time  (UNIX EPOCH)  Setpoint Local Time
 #define HW_DY_104_ONT_SP   72        // Seeding Area Heating Pad LED ON Time (UNIX EPOCH) Setpoint Local Time
 
