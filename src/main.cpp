@@ -116,12 +116,12 @@ const uint32_t DEFAULT_TIME = 1000188000;
   EEPROM_N1N2_MODE_ADDR + sizeof(uint16_t)
 
 // Circ pump
-#define EEPROM_HS_001HOA_ADDR \
-  EEPROM_PH_DOWN_HOA_ADDR + sizeof(uint16_t)
+#define EEPROM_HS_105HOA_ADDR \
+  EEPROM_PH_DOWN_HOA_ADDR + 5 * sizeof(uint16_t)
 
 // fan pump
 #define EEPROM_HS_101HOA_ADDR \
-  EEPROM_HS_001HOA_ADDR + sizeof(uint16_t)
+  EEPROM_HS_105HOA_ADDR + sizeof(uint16_t)
 
 // seeding
 #define EEPROM_HS_102HOA_ADDR \
@@ -148,7 +148,7 @@ const uint32_t DEFAULT_TIME = 1000188000;
 // comment out to not include terminal processing
 // #define PROCESS_TERMINAL
 // #define PROCESS_TERMINAL_VERBOSE
-Stream *debugOutputStream = &Serial3;
+ Stream *debugOutputStream = NULL;
 
 // #define PROCESS_MODBUS
 
@@ -314,6 +314,7 @@ void processTemperatureCompensation();
 void processSerializeMessage();
 void processTimeSetMessage();
 void processControllerMessage();
+void processSoftHOAMessage();
 void showCommands();
 void processFanDurations();
 void processCirculationPumpDurations();
@@ -574,7 +575,10 @@ DA_NonBlockingDelay KI_003 = DA_NonBlockingDelay(TEMPERATURE_COMPENSATE_CYCLE,
 void setup()
 {
 #ifdef PROCESS_TERMINAL
-  Serial3.begin(9600);
+  //Serial3.begin(9600);
+  //Stream *debugOutputStream = &Serial3;
+  Serial.begin(9600);
+  debugOutputStream = &Serial;
 #endif // ifdef PROCESS_TERMINAL
 
 #ifdef PROCESS_MODBUS
@@ -583,8 +587,9 @@ void setup()
 
   randomSeed(analogRead(0));
 
-
+ 
   setupRTC();
+
 
 
   HS_002.setPollingInterval(500);   // ms
@@ -600,7 +605,7 @@ void setup()
   // HS_003C.suspendPoll();
   HS_003C.setOnEdgeEvent(&on_RemoteLocalToggle);
 
-  #if  defined(INCLUDE_LCD)
+#if  defined(INCLUDE_LCD)
   HS_003A.setPollingInterval(200); // ms
   HS_003B.setPollingInterval(200); // ms
 
@@ -664,12 +669,10 @@ void setup()
 
   lcd.clear();
   #endif // if  defined( INCLUDE_LCD)
-  MY_101.start(DA_DiscreteOutputTmr::Continuous);
-  PY_001.start(DA_DiscreteOutputTmr::Continuous);
 
-
-  if (isEEPROMConfigured() == EEPROM_CONFIGURED)
+ if (isEEPROMConfigured() == EEPROM_CONFIGURED)
   {
+
     EEPROMLoadConfig();
   }
   else
@@ -677,6 +680,12 @@ void setup()
     EEPROMWriteDefaultConfig();
     EEPROMLoadConfig();
   }
+
+
+  MY_101.start(DA_DiscreteOutputTmr::Continuous);
+  PY_001.start(DA_DiscreteOutputTmr::Continuous);
+
+
 
 
 }
@@ -936,7 +945,7 @@ void on_Fan_Process(DA_HOASwitch::HOADetectType state)
 
 void on_GrowingChamberLED_Process(DA_HOASwitch::HOADetectType state)
 {
-#ifdef PROCESS_TERMINAL_VERBOSE
+#ifdef PROCESS_TERMINAL
   *debugOutputStream << "on_GrowingChamberLED_Process HS_103AB" << endl;
   HS_103AB.serialize(debugOutputStream, true);
 #endif // ifdef PROCESS_TERMINAL_VERBOSE
@@ -2183,7 +2192,7 @@ void processModbusRemoteHOAs()
   if (HS_105AB.setRemoteState(modbusRegisters[HW_HS_105HOA_SP]))
   {
     EEPROMWriteUint16(modbusRegisters[HW_HS_105HOA_SP],
-                      EEPROM_HS_001HOA_ADDR);
+                      EEPROM_HS_105HOA_ADDR);
   }
   else modbusRegisters[HW_HS_105HOA_SP] = HS_105AB.getCurrentState(); ;
 
@@ -2284,7 +2293,7 @@ void EEPROMWriteDefaultConfig()
   EEPROMWriteUint16(DEFAULT_PH_SETPOINT,        EEPROM_PH_SETPOINT_ADDR);
   EEPROMWriteUint16(DEFAULT_XIC_MODE,           EEPROM_PH_DOWN_HOA_ADDR);
   EEPROMWriteUint16(DEFAULT_XIC_MODE,           EEPROM_N1N2_MODE_ADDR);
-  EEPROMWriteUint16(DEFAULT_XIC_MODE,           EEPROM_HS_001HOA_ADDR);
+  EEPROMWriteUint16(DEFAULT_XIC_MODE,           EEPROM_HS_105HOA_ADDR);
   EEPROMWriteUint16(DEFAULT_XIC_MODE,           EEPROM_HS_101HOA_ADDR);
   EEPROMWriteUint16(DEFAULT_XIC_MODE,           EEPROM_HS_102HOA_ADDR);
   EEPROMWriteUint16(DEFAULT_XIC_MODE,           EEPROM_HS_103HOA_ADDR);
@@ -2331,6 +2340,7 @@ uint16_t isEEPROMConfigured()
 
 void EEPROMLoadConfig()
 {
+  
   growingChamberLights.offEpoch = EEPROMReadEventEntry(
     EEPROM_GROWING_CHAMBER_OFF_TIME_ADDR);
   growingChamberLights.onEventOff =  doGrowingChamberLightsOff;
@@ -2355,10 +2365,7 @@ void EEPROMLoadConfig()
     EEPROM_HEATING_PAD_ON_TIME_ADDR);
   heatingPad.onEventOn = doHeatingPadOn;
 
-  gRemoteControl = EEPROMReadUint16(EEPROM_GROWING_HS_003C_ADDR);
-  HS_105AB.setRemoteControl(gRemoteControl);
-  HS_102AB.setRemoteControl(gRemoteControl);
-  HS_103AB.setRemoteControl(gRemoteControl);
+
 
   PY_001.setActiveDuration(EEPROMReadUint16(
                              EEPROM_CIRCULATION_PUMP_ON_DURATION_ADDR));
@@ -2386,13 +2393,17 @@ void EEPROMLoadConfig()
 //  XIC_003.setControlMode(EEPROMReadUint16(EEPROM_N1N2_MODE_ADDR));
 //  XIC_003.setSP(EEPROMReadUint16(EEPROM_EC_SETPOINT_ADDR));
 
-  HS_105AB.setRemoteState(EEPROMReadUint16(EEPROM_HS_001HOA_ADDR));
-  HS_101AB.setRemoteState(EEPROMReadUint16(EEPROM_HS_101HOA_ADDR));
-  HS_102AB.setRemoteState(EEPROMReadUint16(EEPROM_HS_102HOA_ADDR));
-  HS_103AB.setRemoteState(EEPROMReadUint16(EEPROM_HS_103HOA_ADDR));
-  HS_104AB.setRemoteState(EEPROMReadUint16(EEPROM_HS_104HOA_ADDR));
+HS_105AB.setRemoteState(EEPROMReadUint16(EEPROM_HS_105HOA_ADDR));
+HS_101AB.setRemoteState(EEPROMReadUint16(EEPROM_HS_101HOA_ADDR));
+HS_102AB.setRemoteState(EEPROMReadUint16(EEPROM_HS_102HOA_ADDR));
+HS_103AB.setRemoteState(EEPROMReadUint16(EEPROM_HS_103HOA_ADDR));
+HS_104AB.setRemoteState(EEPROMReadUint16(EEPROM_HS_104HOA_ADDR));
+HS_011.setRemoteState(EEPROMReadUint16(EEPROM_PH_DOWN_HOA_ADDR));
 
-  HS_011.setRemoteState(EEPROMReadUint16(EEPROM_PH_DOWN_HOA_ADDR));
+gRemoteControl = EEPROMReadUint16(EEPROM_GROWING_HS_003C_ADDR);
+HS_105AB.setRemoteControl(gRemoteControl);
+HS_102AB.setRemoteControl(gRemoteControl);
+HS_103AB.setRemoteControl(gRemoteControl);
 }
 
 #ifdef PROCESS_TERMINAL
@@ -2439,6 +2450,7 @@ void EEPROMLoadConfig()
 # define SERIALIZE_PH 'p'
 # define SERIALIZE_EC 'e'
 # define SERIALIZE_XIC 'x'
+# define SERIALIZE_GC_HOA 'g'
 
 # define CALIBRATE_LOW 'l'         // EC, pH
 # define CALIBRATE_MID 'm'         // pH
@@ -2447,6 +2459,8 @@ void EEPROMLoadConfig()
 # define CALIBRATE_CLEAR  'c'      // EC,pH
 # define CALIBRATE_QUERY  'q'      // EC,pH
 
+#define  SOFT_HOA_HEADER 'H'
+#define  SOFT_HOA_GC 'g'
 # define CONTROLLER_XIC_001_HEADER 'X'
 # define CONTROLLER_XIC_001_PV 'p' // PV
 # define CONTROLLER_XIC_001_SP 's' // set point
@@ -2698,6 +2712,7 @@ void showCommands()
   *debugOutputStream << F("Sp - Serialize pH") << endl;
   *debugOutputStream << F("Se - Serialize EC") << endl;
   *debugOutputStream << F("Sx - Serialize XIC") << endl;
+  *debugOutputStream << F("Sg - Serialize GC HOA") << endl;
   *debugOutputStream << F("Ep99.99 - Temperature Compensate pH") << endl;
   *debugOutputStream << F("Zl  - Calibrate pH Low") << endl;
   *debugOutputStream << F("Zm - Calibrate pH mid") << endl;
@@ -2730,8 +2745,8 @@ void showCommands()
     "Xt0|1   - set XIC trend type 0=trendinup, 1=trendingdown") << endl;
     *debugOutputStream << F("Xr  - Refresh Controller") <<
       endl;
-
-
+  *debugOutputStream << F("Hg1|2|3   - set GC Soft HOA 1=OFF, 2=HAND, 3=AUTO") <<
+    endl;
   *debugOutputStream <<
     "------------------------------------------------------------------" << endl;
 }
@@ -2775,8 +2790,14 @@ void processSerializeMessage()
 
   case SERIALIZE_CIRCULATION_FAN:
     MY_101.serialize(debugOutputStream, true);
+    HS_101AB.serialize(debugOutputStream, true);
     break;
-
+  case SERIALIZE_GC_HOA:
+    *debugOutputStream << F("GC HOA:HS_103AB") << endl;
+    HS_103AB.serialize(debugOutputStream, true);
+    *debugOutputStream << F("GC LIGHT:DY_103") << endl;
+    DY_103.serialize(debugOutputStream, true);
+    break;
   case SERIALIZE_PH:
     AT_001.serialize(debugOutputStream, true);
     break;
@@ -2797,6 +2818,64 @@ void processSerializeMessage()
 
   default:
     break;
+  }
+}
+
+void processSoftHOAMessage()
+{
+  char  c = debugOutputStream->read();
+  int   x;
+
+
+  switch (c)
+  {
+  
+  case SOFT_HOA_GC:
+    x = debugOutputStream->parseInt();
+
+    if( x >=1 && x <=3)
+    {
+    *debugOutputStream << F("GC HOA:HS_103AB Before") << endl;
+    HS_103AB.serialize(debugOutputStream, true);
+    
+
+
+    if (HS_103AB.setRemoteState(x))
+    {
+      HS_102AB.setRemoteState(x);
+            EEPROMWriteUint16(x,
+                      EEPROM_HS_102HOA_ADDR);
+      *debugOutputStream << F("GC SOFT HOA:Writing") << endl;
+      EEPROMWriteUint16(x,
+                      EEPROM_HS_103HOA_ADDR);
+
+*debugOutputStream << "105 mem:" << EEPROMReadUint16(EEPROM_HS_105HOA_ADDR) << " address:"<< EEPROM_HS_105HOA_ADDR <<endl;
+
+*debugOutputStream << "101 mem:" << EEPROMReadUint16(EEPROM_HS_101HOA_ADDR) << " address:"<< EEPROM_HS_101HOA_ADDR <<endl;
+*debugOutputStream << "102 mem:" << EEPROMReadUint16(EEPROM_HS_102HOA_ADDR) << " address:"<< EEPROM_HS_102HOA_ADDR <<endl;
+*debugOutputStream << "103 mem:" << EEPROMReadUint16(EEPROM_HS_103HOA_ADDR) << " address:"<< EEPROM_HS_103HOA_ADDR <<endl;
+
+     
+    }
+    
+
+
+    *debugOutputStream << F("GC HOA:HS_103AB After") << endl;
+    HS_103AB.serialize(debugOutputStream, true);
+    *debugOutputStream << F("GC LIGHT:DY_103") << endl;
+    DY_103.serialize(debugOutputStream, true);
+   }
+   else
+   {
+        *debugOutputStream << F("Invalid GC Soft HOA") << endl;
+   }
+   
+
+    break;
+
+
+  default:
+    *debugOutputStream << "invalid SOFT HOA command" << endl;
   }
 }
 
@@ -3005,6 +3084,11 @@ void processTerminalCommands()
     if (c == CONTROLLER_XIC_001_HEADER)
     {
       processControllerMessage();
+    }
+    else
+    if (c == SOFT_HOA_HEADER)
+    {
+      processSoftHOAMessage();
     }
     else
     if (c == CALIBRATE_EC_HEADER) processCalibrateMessage(i2c_ec);
