@@ -1,4 +1,4 @@
-  #include <Arduino.h>
+#include <Arduino.h>
 
 /**
  *  @file   main.cpp
@@ -21,11 +21,12 @@
 #include <Wire.h>      // for RTC
 #include <DS3232RTC.h> // http://github.com/JChristensen/DS3232RTC
 #include <avr/eeprom.h>
+#include <avr/wdt.h>
 #include <Streaming.h>
 #include <NewPing.h>
 #include <Adafruit_Sensor.h>
-#include <DHT.h>               // DHT-22 humidity sensor
-#include <RunningMedian.h>     // https://github.com/RobTillaart/Arduino/tree/master/libraries/RunningMedian
+#include <DHT.h>           // DHT-22 humidity sensor
+#include <RunningMedian.h> // https://github.com/RobTillaart/Arduino/tree/master/libraries/RunningMedian
 
 #include <DA_Flowmeter.h>
 #include <DA_Discreteinput.h>
@@ -52,10 +53,10 @@
 #define DEFAULT_FAN_OFF_DURATION 30 * 60              // 30 min * 60 s
 
 // Flow Max DS-01230-D2 12V 3.3 GPM Water Pump Duty cycle 5 minutes on 10 minutes off
-#define DEFAULT_DRAIN_PUMP_ON_DURATION 5 * 60         
-#define DEFAULT_DRAIN_PUMP_OFF_DURATION 10 * 60       
+#define DEFAULT_DRAIN_PUMP_ON_DURATION 5 * 60
+#define DEFAULT_DRAIN_PUMP_OFF_DURATION 10 * 60
 
-#define DEFAULT_HEARTBEAT_DURATION 2              // seconds
+#define DEFAULT_HEARTBEAT_DURATION 2 // seconds
 
 #define DEFAULT_PH_AUTO_VOLUME 5    // ml
 #define DEFAULT_PH_AUTO_INTERVAL 60 // s
@@ -143,7 +144,7 @@ const uint32_t DEFAULT_TIME = 1000188000;
                                              sizeof(uint16_t)
 
 #define EEPROM_DRAIN_PUMP_ON_DURATION_ADDR EEPROM_HEATING_PAD_OFF_TIME_ADDR + \
-                                                     sizeof(uint16_t)
+                                               sizeof(uint16_t)
 #define EEPROM_DRAIN_PUMP_OFF_DURATION_ADDR \
   EEPROM_DRAIN_PUMP_ON_DURATION_ADDR + sizeof(uint16_t)
 
@@ -202,8 +203,6 @@ DA_FlowMeter FT_003(FT003_SENSOR_INTERUPT_PIN, FLOW_CALC_PERIOD_MS / 1000);
 volatile uint32_t timeOn_AT_102Start = 0;
 volatile uint16_t AT_102Raw = 0;
 RunningMedian AT_102MedianFilter = RunningMedian(5);
-
-
 
 // Ph and EC probes
 //
@@ -302,6 +301,7 @@ void writeModbusCoil(uint8_t startAddress,
                      bool value);
 
 void on_AeratorProcess();
+void on_watchdogTimerEvent(bool state);
 #if defined(PROCESS_TERMINAL)
 void processTerminalCommands();
 void processCalibrateMessage(IO_TYPE aIO_Type);
@@ -327,12 +327,11 @@ void displayEventControlEntry(char *who,
 
 #endif // ifdef PROCESS_TERMINAL
 
-
 // DHT-22 - one wire type humidity sensor (won't work with one wire lib)
 #define DHT_BUS_PIN 5
 DHT AT_101 = DHT(DHT_BUS_PIN, DHT22);
 float AT_101T = NAN;
-float AT_101H =  NAN;
+float AT_101H = NAN;
 float AT_101HI = NAN;
 
 // atlas sensor
@@ -388,7 +387,6 @@ DA_DiscreteOutput DY_104 = DA_DiscreteOutput(35, LOW);
 // Growing Chamber LED
 DA_DiscreteOutput DY_103 = DA_DiscreteOutput(32, LOW);
 
-
 // Heartbeat LED
 DA_DiscreteOutputTmr HY_001 = DA_DiscreteOutputTmr(13,
                                                    LOW,
@@ -436,8 +434,6 @@ DA_DiscreteInput SSH_101 = DA_DiscreteInput(9);
 DA_DiscreteInput HS_002 = DA_DiscreteInput(49,
                                            DA_DiscreteInput::ToggleDetect,
                                            true);
-
-
 
 // Circulation Pump Hand : HOA
 DA_HOASwitch HS_105AB = DA_HOASwitch();
@@ -507,6 +503,10 @@ DA_NonBlockingDelay KI_003 = DA_NonBlockingDelay(TEMPERATURE_COMPENSATE_CYCLE,
 
 void setup()
 {
+
+  wdt_disable();
+  delay(3000);
+  wdt_enable(WDTO_8S);
 #if defined(PROCESS_TERMINAL)
   //Serial3.begin(9600);
   //Stream *debugOutputStream = &Serial3;
@@ -516,8 +516,8 @@ void setup()
 
 #if defined(PROCESS_MODBUS)
 #if defined(MODBUS_IP)
-  //Ethernet.init(53);  
-//pinMode(53, OUTPUT);
+  //Ethernet.init(53);
+  //pinMode(53, OUTPUT);
   Ethernet.begin(defaultMAC, defaultIP, defaultGateway, defaultSubnet);
 #else
   slave.begin(MB_SERIAL_BAUD);
@@ -536,8 +536,6 @@ void setup()
   HS_001.setPollingInterval(200); // ms
   // HS_001.setDebounceTime( 110);
   HS_001.setOnEdgeEvent(&on_DrainPump_Process);
-
-
 
   HS_105AB.setOnStateChangeDetect(&on_Circulation_Pump_Process);
   HS_101AB.setOnStateChangeDetect(&on_Fan_Process);
@@ -567,6 +565,8 @@ void setup()
   sensors.begin();
   initOneWire();
 
+
+
   // humidity sensor
   AT_101.begin();
   ENABLE_FT002_SENSOR_INTERRUPTS;
@@ -588,6 +588,7 @@ void setup()
   MY_101.start(DA_DiscreteOutputTmr::Continuous);
   PY_001.start(DA_DiscreteOutputTmr::Continuous);
   //PY_002.start(DA_DiscreteOutputTmr::Continuous);
+  HY_001.setOnTimeEvent(&on_watchdogTimerEvent);
   HY_001.start(DA_DiscreteOutputTmr::Continuous);
 }
 
@@ -691,6 +692,11 @@ void on_InletValve_Process(bool state, int aPin)
     VY_001A.reset();
 }
 
+void on_watchdogTimerEvent(bool state)
+{
+   wdt_reset();
+}
+
 void on_DrainPump_Process(bool state, int aPin)
 {
 #if defined(PROCESS_TERMINAL_VERBOSE)
@@ -702,15 +708,13 @@ void on_DrainPump_Process(bool state, int aPin)
   {
     //PY_002.enable();
     //PY_002.reset();
-      PY_002.forceActive();
+    PY_002.forceActive();
   }
   else
   {
     //PY_002.pauseTimer();
     PY_002.disable();
-
   }
-
 }
 
 void on_Circulation_Pump_Process(DA_HOASwitch::HOADetectType state)
@@ -975,9 +979,6 @@ void initOneWire()
   initOneWireDevice(mixtureTemperatureAddress, 1);
 }
 
-
-
-
 void onAtlasPhSample(IO_TYPE type, float value)
 {
   // AT_001.serialize( debugOutputStream, true);
@@ -1024,7 +1025,6 @@ void refreshDiscreteOutputs()
   PY_001.refresh(); // on/off timer
   MY_101.refresh(); // on/off timer
   HY_001.refresh(); // on/off timer
-
 }
 
 void doOnMidnight()
@@ -1106,7 +1106,6 @@ void do_ONP_SPoll()
 #if defined(NO_PING)
   float tLevel;
 #endif // if defined(NO_PING)
-
 
   // *debugOutputStream << "CO2" << AT_102Raw << endl;
   if (HS_103AB.getCurrentState() == DA_HOASwitch::Auto)
@@ -1301,13 +1300,11 @@ void refreshModbusRegisters()
   writeModbusCoil(COIL_STATUS_READ_WRITE_OFFSET, CW_DY_104, DY_104.isActive());
   writeModbusCoil(COIL_STATUS_READ_WRITE_OFFSET, CW_PY_002, PY_002.isActive());
 
-
-
-  isNaanModbus( AT_101H );  
+  isNaanModbus(AT_101H);
   modbusRegisters[HR_AT_101] = bfconvert.regsf[0];
   modbusRegisters[HR_AT_101 + 1] = bfconvert.regsf[1];
 
-  isNaanModbus( AT_101T );  
+  isNaanModbus(AT_101T);
   modbusRegisters[HR_TT_101] = bfconvert.regsf[0];
   modbusRegisters[HR_TT_101 + 1] = bfconvert.regsf[1];
 
@@ -1585,7 +1582,6 @@ void setModbusDrainPumpOffDuration()
   }
 }
 
-
 void setConfigToDefaults()
 {
   if (getModbusCoilValue(COIL_STATUS_READ_WRITE_OFFSET, CW_KY_001))
@@ -1856,7 +1852,6 @@ void processModbusRemoteHOAs()
   }
   else
     modbusRegisters[HW_HS_102HOA_SP] = HS_102AB.getCurrentState();
-  
 
   // GC area light  remote HOA
   if (HS_103AB.setRemoteState(modbusRegisters[HW_HS_103HOA_SP]))
@@ -1941,8 +1936,6 @@ void EEPROMWriteDefaultConfig()
   EEPROMWriteUint16(DEFAULT_XIC_MODE, EEPROM_HS_102HOA_ADDR);
   EEPROMWriteUint16(DEFAULT_XIC_MODE, EEPROM_HS_103HOA_ADDR);
   EEPROMWriteUint16(DEFAULT_XIC_MODE, EEPROM_HS_104HOA_ADDR);
-
- 
 }
 
 void EEPROMWriteUint16(uint16_t duration, uint16_t atAddress)
@@ -2016,7 +2009,7 @@ void EEPROMLoadConfig()
   //PY_002.setActiveDuration(EEPROMReadUint16(
   //    EEPROM_DRAIN_PUMP_ON_DURATION_ADDR));
   //PY_002.setInactiveDuration(EEPROMReadUint16(
-  //    EEPROM_DRAIN_PUMP_OFF_DURATION_ADDR));      
+  //    EEPROM_DRAIN_PUMP_OFF_DURATION_ADDR));
 
   MY_101.setActiveDuration(EEPROMReadUint16(EEPROM_FAN_ON_DURATION_ADDR));
   MY_101.setInactiveDuration(EEPROMReadUint16(EEPROM_FAN_OFF_DURATION_ADDR));
@@ -2045,8 +2038,6 @@ void EEPROMLoadConfig()
   HS_103AB.setRemoteState(EEPROMReadUint16(EEPROM_HS_103HOA_ADDR));
   HS_104AB.setRemoteState(EEPROMReadUint16(EEPROM_HS_104HOA_ADDR));
   HS_011.setRemoteState(EEPROMReadUint16(EEPROM_PH_DOWN_HOA_ADDR));
-
-
 }
 
 #if defined(PROCESS_TERMINAL)
@@ -2068,7 +2059,7 @@ void EEPROMLoadConfig()
 #define LIGHTS_ON '1'                     // Turn lights on L1
 #define LIGHTS_OFF '0'                    // Turn lights off L0
 #define CIRCULATION_PUMP_HEADER 'C'       // Circulation pump Header tag
-#define DRAIN_PUMP_HEADER 'R'       // Drain punmp Header tag
+#define DRAIN_PUMP_HEADER 'R'             // Drain punmp Header tag
 #define FAN_HEADER 'F'                    // Light Header tag
 #define TEMPERATURE_COMPENSATE_HEADER 'E' // Atlas Sensor Tempearture
                                           // Compensate
@@ -2177,7 +2168,7 @@ void processDisplayMessage()
     dateTimeToBuffer(atime, bufferMem);
 
     *debugOutputStream << bufferMem << endl;
-     //refreshModbusRegisters();
+    //refreshModbusRegisters();
     //*debugOutputStream << modbusRegisters[HR_QT_001_CV]  << " " << modbusRegisters[HR_QT_001_CV+1] <<endl;
   }
   else if (c == DISPLAY_ALARMS)
@@ -2323,7 +2314,6 @@ void processDrainPumpDurations()
   }
 }
 
-
 void processFanDurations()
 {
   char c = debugOutputStream->read();
@@ -2432,6 +2422,7 @@ void processSerializeMessage()
   switch (c)
   {
   case SERIALIZE_CIRCULATION_PUMP:
+   
     PY_001.serialize(debugOutputStream, true);
     break;
   case SERIALIZE_DRAIN_PUMP:
@@ -2490,7 +2481,7 @@ void processSoftHOAMessage()
       if (HS_103AB.setRemoteState(x))
       {
         //HS_102AB.setRemoteState(x);
-         EEPROMWriteUint16(x,
+        EEPROMWriteUint16(x,
                           EEPROM_HS_102HOA_ADDR);
         *debugOutputStream << F("GC SOFT HOA:Writing") << endl;
         EEPROMWriteUint16(x,
