@@ -34,11 +34,11 @@
 // #define HOLDING_REGISTER_WRITE_OFFSET 30
 
 // read coils
-#define CS_HS_001 0   // Drain Pump Hand status : Start/Stop
-#define CS_SSH_101 1  // Smoke Detector
-#define CS_HS_002 2   // Inlet H20 Open/Close
-#define CS_LSHH_002 3 // nutrient mixture hi-hi level switch
-#define CS_SPARE_CS1 4  // SPARE COIL STATUS
+#define CS_HS_001 0    // Drain Pump Hand status : Start/Stop
+#define CS_SSH_101 1   // Smoke Detector
+#define CS_HS_002 2    // Inlet H20 Open/Close
+#define CS_LSHH_002 3  // nutrient mixture hi-hi level switch
+#define CS_SPARE_CS1 4 // SPARE COIL STATUS
 
 // write coils
 #define CW_VY_001A 81       // inlet H20 valve, active low 12VDC
@@ -72,6 +72,7 @@
 #define CW_HS_002_SP 109    // Inlet H20 Open/Close from HMI
 #define CW_LSHH_002_BYP 110 // nutrient mixture hi-hi level switch Bypass from HMI (1=bypass)
 #define CW_DY_104 111       // Heating Pad on/off
+#define CW_XY_002 112       // reset inlet flow meter (1=reset)
 
 // Read holding registers 16 bit
 #define HR_HS_105_HOA_CV 30 // Circulation pump HOA current value (remote or local)
@@ -90,9 +91,9 @@
 #define HR_MY_101_ONP_CV 42 // Fan  120VAC ON Period in sec  Current Value
 #define HR_PY_001_OFP_CV 43 // Circulation Pump 120VAC OFF Period in sec  Current Value
 #define HR_PY_001_ONP_CV 44 // Circulation Pump 120VAC ON Period in sec  Current Value
-#define HR_SPARE1 45        // Nutrient 1 Pump HOA (H=2,O=1,A=3)
-#define HR_SPARE2 46        // Nutrient 2 Pump  HOA (H=2,O=1,A=3)
-#define HR_SPARE3 47        // pH Down Pump  HOA (H=2,O=1,A=3)
+#define HR_SPARE3 45        //
+#define HR_SPARE3 46        //
+#define HR_SPARE3 47        //
 #define HR_AT_001_SP_CV 48  // pH Setpoint (pH * 10 )
 #define HR_AT_002_SP_CV 49  // EC Setpoint
 #define HR_AT_011_AV_CV 50  // pH volume (m) to dispense during auto for one  interval T
@@ -103,25 +104,26 @@
 #define HR_AT_002_MV_CV 55  // N1/N2 volume (ml) to dispense during manual (oneshot)
 #define HR_MY_201_OFP_SP 56 // Tank Aerator Off Period in sec  current value
 #define HR_MY_201_ONP_SP 57 // Tank Aerator On Period in sec  current value
-#define HR_PY_002_OFP_CV 58        // Drain Pump  off duration
-#define HR_PY_002_ONP_CV 59        // Drain Pump on duration 
+#define HR_PY_002_OFP_CV 58 // Drain Pump  off duration
+#define HR_PY_002_ONP_CV 59 // Drain Pump on duration
 
 // Read Holding registers 32 bit
-#define HR_AT_001 80    // Nutrient pH
-#define HR_AT_001_TV 82 // pH Temperature Compensation Value
-#define HR_AT_002 84    // Nutrient EC
-#define HR_AT_002_TV 86 // EC Temperature Compensation Value
-#define HR_AT_002SAL 88 // Nutrient Salinity
-#define HR_AT_002SG 90  // Nutrient Specific Gravity
-#define HR_AT_002TDS 92 // Nutrient TDS
-#define HR_AT_101 94    // Ambient relative humidity
-#define HR_AT_102 96    // CO2 Sensor PPM
-#define HR_FT_002 98    // Inlet Flow
-#define HR_FT_003 100   // Nutrient Flow
-#define HR_LT_002 102   // Water Level present value in cm from top,  0-> undefined
-#define HR_TT_001 104   // mixture temperature
-#define HR_TT_101 106   // Abient Temperature
-#define HR_QT_001_CV 108  // Current time in UNIX EPOCH
+#define HR_AT_001 80     // Nutrient pH
+#define HR_AT_001_TV 82  // pH Temperature Compensation Value
+#define HR_AT_002 84     // Nutrient EC
+#define HR_AT_002_TV 86  // EC Temperature Compensation Value
+#define HR_AT_002SAL 88  // Nutrient Salinity
+#define HR_AT_002SG 90   // Nutrient Specific Gravity
+#define HR_AT_002TDS 92  // Nutrient TDS
+#define HR_AT_101 94     // Ambient relative humidity
+#define HR_AT_102 96     // CO2 Sensor PPM
+#define HR_FT_002 98     // Inlet Flow
+#define HR_FT_003 100    // Nutrient Flow
+#define HR_LT_002 102    // Water Level present value in cm from top,  0-> undefined
+#define HR_TT_001 104    // mixture temperature
+#define HR_TT_101 106    // Abient Temperature
+#define HR_QT_001_CV 108 // Current time in UNIX EPOCH
+#define HR_FT_002_VOL 110    // Nutrient Tank Volume Accumulation
 
 #define HR_DY_102_OFT_CV 120 // Seeding Area LED OFF Time  (UNIX EPOCH)  Current Value  UTC
 #define HR_DY_102_ONT_CV 122 // Seeding Area Chamber LED ON Time (UNIX EPOCH) Current Value UTC
@@ -165,18 +167,18 @@
 #define HW_DY_102_ONT_SP 62 // Seeding Area Chamber LED ON Time (UNIX EPOCH) Setpoint  Local Time
 #define HW_DY_103_OFT_SP 64 // Growing Chamber LED OFF Time  (UNIX EPOCH)  Setpoint  Local Time
 #define HW_DY_103_ONT_SP 66 // Growing Chamber LED ON Time (UNIX EPOCH)  Setpoint  Local Time
-#define HW_QT_001_SP 68     // Realt-time clock time (UNIX EPOCH)  Setpoint UTC
+#define HW_QT_001_SP 68     // Real-time clock time (UNIX EPOCH)  Setpoint UTC
 #define HW_DY_104_OFT_SP 70 // Seeding Area Heating Pad OFF Time  (UNIX EPOCH)  Setpoint Local Time
 #define HW_DY_104_ONT_SP 72 // Seeding Area Heating Pad LED ON Time (UNIX EPOCH) Setpoint Local Time
 
 union {
-        uint16_t regsf[2];
-        float val;
+  uint16_t regsf[2];
+  float val;
 } bfconvert;
 
 union {
-        uint16_t regsl[2];
-        long val;
+  uint16_t regsl[2];
+  long val;
 } blconvert;
 
 #if defined(MODBUS_IP)
@@ -200,8 +202,8 @@ uint16_t modbusRegisters[MODBUS_REG_COUNT];
 Modbus slave(MB_SLAVE_ID, MB_SERIAL_PORT);
 #endif // if defined(MODBUS_IP)
 
-#define isNaanModbus( x )   \
-  if( isnan(x) )   \
-    bfconvert.val = -127;\
-  else \
+#define isNaanModbus(x)   \
+  if (isnan(x))           \
+    bfconvert.val = -127; \
+  else                    \
     bfconvert.val = x;

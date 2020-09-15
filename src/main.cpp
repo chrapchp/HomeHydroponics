@@ -289,6 +289,7 @@ void setModbusHeatingPadOnTime();
 void setModbusHeatingPadOffTime();
 void setModbusCirculationDrainOffDuration();
 void setModbusCirculationDrainOnDuration();
+void processMiscCommands();
 
 void setModbusTime();
 void setupRTC();
@@ -302,6 +303,9 @@ void writeModbusCoil(uint8_t startAddress,
 
 void on_AeratorProcess();
 void on_watchdogTimerEvent(bool state);
+
+
+
 #if defined(PROCESS_TERMINAL)
 void processTerminalCommands();
 void processCalibrateMessage(IO_TYPE aIO_Type);
@@ -456,6 +460,7 @@ DA_HOASwitch HS_011 = DA_HOASwitch();
 // Aerator HOA (remote only)
 DA_HOASwitch HS_201 = DA_HOASwitch();
 
+
 DA_NutrientController XIC_001 = DA_NutrientController(45, HIGH, 6.5,
                                                       DA_NutrientController::RISINGTREND);
 
@@ -543,6 +548,8 @@ void setup()
   HS_103AB.setOnStateChangeDetect(&on_GrowingChamberLED_Process);
   HS_104AB.setOnStateChangeDetect(&on_HeatingPad_Process);
 
+
+
   HS_011.setOnStateChangeDetect(&on_pHDownProcess);
 
   HS_201.setOnStateChangeDetect(&on_AeratorProcess);
@@ -569,9 +576,11 @@ void setup()
 
   // humidity sensor
   AT_101.begin();
-  ENABLE_FT002_SENSOR_INTERRUPTS;
+
   FT_002.setMeterFactor(7.5);
   FT_003.setMeterFactor(7.5);
+  ENABLE_FT002_SENSOR_INTERRUPTS;
+  ENABLE_FT003_SENSOR_INTERRUPTS;
   ENABLE_CO2_SENSOR_RISING_INTERRUPTS;
 
   if (isEEPROMConfigured() == EEPROM_CONFIGURED)
@@ -716,6 +725,8 @@ void on_DrainPump_Process(bool state, int aPin)
     PY_002.disable();
   }
 }
+
+
 
 void on_Circulation_Pump_Process(DA_HOASwitch::HOADetectType state)
 {
@@ -1318,6 +1329,10 @@ void refreshModbusRegisters()
   modbusRegisters[HR_FT_002] = bfconvert.regsf[0];
   modbusRegisters[HR_FT_002 + 1] = bfconvert.regsf[1];
 
+  bfconvert.val = FT_002.getCummulativeVolume();
+  modbusRegisters[HR_FT_002_VOL] = bfconvert.regsf[0];
+  modbusRegisters[HR_FT_002_VOL + 1] = bfconvert.regsf[1];
+
   bfconvert.val = FT_003.getCurrentFlowRate();
   modbusRegisters[HR_FT_003] = bfconvert.regsf[0];
   modbusRegisters[HR_FT_003 + 1] = bfconvert.regsf[1];
@@ -1818,7 +1833,16 @@ void processModbusCommands()
 
   // remote HOAs
   processModbusRemoteHOAs();
+
+  processMiscCommands();
 }
+
+void processMiscCommands()
+{
+if (getModbusCoilValue(COIL_STATUS_READ_WRITE_OFFSET, CW_XY_002))
+    FT_002.resetStatistics();
+}
+
 
 void processModbusRemoteHOAs()
 {
@@ -2086,6 +2110,7 @@ void EEPROMLoadConfig()
 #define SERIALIZE_EC 'e'
 #define SERIALIZE_XIC 'x'
 #define SERIALIZE_GC_HOA 'g'
+#define SERIALIZE_FT_002 'm'
 
 #define CALIBRATE_LOW 'l'   // EC, pH
 #define CALIBRATE_MID 'm'   // pH
@@ -2354,6 +2379,7 @@ void showCommands()
   *debugOutputStream << F("Se - Serialize EC") << endl;
   *debugOutputStream << F("Sx - Serialize XIC") << endl;
   *debugOutputStream << F("Sg - Serialize GC HOA") << endl;
+  *debugOutputStream << F("Sm - Serialize FT-002") << endl;
   *debugOutputStream << F("Ep99.99 - Temperature Compensate pH") << endl;
   *debugOutputStream << F("Zl  - Calibrate pH Low") << endl;
   *debugOutputStream << F("Zm - Calibrate pH mid") << endl;
@@ -2456,6 +2482,10 @@ void processSerializeMessage()
     XIC_001.serialize(debugOutputStream, true);
 
     break;
+  case SERIALIZE_FT_002:
+    FT_002.serialize(debugOutputStream, true);
+
+    break;    
 
   default:
     break;
