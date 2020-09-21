@@ -353,7 +353,7 @@ DeviceAddress mixtureTemperatureAddress =
     {
         0x28, 0xFF, 0xF4, 0xF6, 0x84, 0x16, 0x05, 0x0C};
 
-#define WIRE_BUS_PIN 4 // pin
+#define WIRE_BUS_PIN 6 // pin
 #define ONE_TEMPERATURE_PRECISION 9
 OneWire oneWire(WIRE_BUS_PIN);
 DallasTemperature sensors(&oneWire);
@@ -554,6 +554,10 @@ void setup()
 
   HS_201.setOnStateChangeDetect(&on_AeratorProcess);
 
+  // 1-wire
+  sensors.begin();
+  initOneWire();
+
   AT_001.setOnPollCallBack(onAtlasPhSample);
   AT_001.setPollingInterval(3000);
   AT_001.retrieveCompensatedTemperature();
@@ -568,9 +572,7 @@ void setup()
   XIC_001.setMaxFlowRate(27); // pH pump runs slower than the other two for some
                               // reason
   XIC_001.setAutoControlParameters(10, 120);
-  // 1-wire
-  sensors.begin();
-  initOneWire();
+
 
 
 
@@ -1309,7 +1311,7 @@ void refreshModbusRegisters()
   writeModbusCoil(COIL_STATUS_READ_WRITE_OFFSET, CW_PY_001, PY_001.isActive());
   writeModbusCoil(COIL_STATUS_READ_WRITE_OFFSET, CW_MY_101, MY_101.isActive());
   writeModbusCoil(COIL_STATUS_READ_WRITE_OFFSET, CW_DY_104, DY_104.isActive());
-  writeModbusCoil(COIL_STATUS_READ_WRITE_OFFSET, CW_PY_002, PY_002.isActive());
+  //writeModbusCoil(COIL_STATUS_READ_WRITE_OFFSET, CW_PY_002, PY_002.isActive());
 
   isNaanModbus(AT_101H);
   modbusRegisters[HR_AT_101] = bfconvert.regsf[0];
@@ -1654,6 +1656,8 @@ void processModbusECCommands()
     int calCount = AT_002.calibrateQuery();
     modbusRegisters[HR_AT_002_CS] = AT_002.getProbeCommandStatus();
     modbusRegisters[HR_AT_002_CC] = calCount;
+    AT_002.retrieveCompensatedTemperature();
+
     writeModbusCoil(COIL_STATUS_READ_WRITE_OFFSET, CW_AT_002_CQ, false);
   }
   else if (getModbusCoilValue(COIL_STATUS_READ_WRITE_OFFSET, CW_AT_002_TC))
@@ -1698,6 +1702,7 @@ void processModbusPHCommands()
     int calCount = AT_001.calibrateQuery();
     modbusRegisters[HR_AT_001_CS] = AT_001.getProbeCommandStatus();
     modbusRegisters[HR_AT_001_CC] = calCount;
+    AT_001.retrieveCompensatedTemperature();
     writeModbusCoil(COIL_STATUS_READ_WRITE_OFFSET, CW_AT_001_CQ, false);
   }
   else if (getModbusCoilValue(COIL_STATUS_READ_WRITE_OFFSET, CW_AT_001_TC))
@@ -1839,7 +1844,7 @@ void processModbusCommands()
 
 void processMiscCommands()
 {
-if (getModbusCoilValue(COIL_STATUS_READ_WRITE_OFFSET, CW_XY_002))
+if (getModbusCoilValue(COIL_STATUS_READ_WRITE_OFFSET, CW_KY_004))
     FT_002.resetStatistics();
 }
 

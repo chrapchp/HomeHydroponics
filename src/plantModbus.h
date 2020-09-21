@@ -42,9 +42,9 @@
 
 // write coils
 #define CW_VY_001A 81       // inlet H20 valve, active low 12VDC
-#define CW_PY_002 82        // Drain Pump 12VDC
+#define CW_SPARE0 82        // SPARE 0
 #define CW_KY_001 83        // Reset config to defaults
-#define CW_PY_002 84        // Drain Pump active status
+#define CW_SPARE1 84        // SPARE 1
 #define CW_SPARE2 85        // SPARE2
 #define CW_SPARE3 86        // SPARE3
 #define CW_SPARE4 87        // SPARE4
@@ -72,13 +72,13 @@
 #define CW_HS_002_SP 109    // Inlet H20 Open/Close from HMI
 #define CW_LSHH_002_BYP 110 // nutrient mixture hi-hi level switch Bypass from HMI (1=bypass)
 #define CW_DY_104 111       // Heating Pad on/off
-#define CW_XY_002 112       // reset inlet flow meter (1=reset)
+#define CW_KY_004 112       // reset inlet flow meter (1=reset)
 
 // Read holding registers 16 bit
 #define HR_HS_105_HOA_CV 30 // Circulation pump HOA current value (remote or local)
 #define HR_HS_102_HOA_CV 31 // Seeding Area Light  HOA current value (remote or local)
 #define HR_HS_103_HOA_CV 32 // Growing Chamber Light HOA current value (remote or local)
-#define HR_SPARE4 33        // Spare
+#define HR_SPARE5 33        // Spare
 
 #define HR_KY_002 34        // Version
 #define HR_AT_001_CC 35     // pH Calibrate Calibrated Count
@@ -92,8 +92,8 @@
 #define HR_PY_001_OFP_CV 43 // Circulation Pump 120VAC OFF Period in sec  Current Value
 #define HR_PY_001_ONP_CV 44 // Circulation Pump 120VAC ON Period in sec  Current Value
 #define HR_SPARE3 45        //
-#define HR_SPARE3 46        //
-#define HR_SPARE3 47        //
+#define HR_SPARE4 46        //
+#define HR_SPARE5 47        //
 #define HR_AT_001_SP_CV 48  // pH Setpoint (pH * 10 )
 #define HR_AT_002_SP_CV 49  // EC Setpoint
 #define HR_AT_011_AV_CV 50  // pH volume (m) to dispense during auto for one  interval T
