@@ -1,0 +1,69 @@
+//
+// !!! WARNING !!! AUTO-GENERATED FILE!
+// PLEASE DO NOT MODIFY IT AND USE "platformio.ini":
+// https://docs.platformio.org/page/projectconf/section_env_build.html#build-flags
+//
+{
+    "configurations": [
+        {
+            "name": "PlatformIO",
+            "includePath": [
+                "C:/Dev/source/platformIO/projects/HomeHydroponics/include",
+                "C:/Dev/source/platformIO/projects/HomeHydroponics/src",
+                "C:/Users/chrap/.platformio/packages/framework-arduino-avr/libraries/SoftwareSerial/src",
+                "C:/Dev/source/platformIO/projects/HomeHydroponics/lib/msgModbus",
+                "C:/Dev/source/platformIO/projects/HomeHydroponics/.pio/libdeps/megaatmega2560/arduinounit/src",
+                "C:/Dev/source/platformIO/projects/HomeHydroponics/.pio/libdeps/megaatmega2560/Webduino",
+                "C:/Dev/source/platformIO/projects/HomeHydroponics/.pio/libdeps/megaatmega2560/Ethernet/src",
+                "C:/Dev/source/platformIO/projects/HomeHydroponics/.pio/libdeps/megaatmega2560/Modbus-Master-Slave",
+                "C:/Users/chrap/.platformio/packages/framework-arduino-avr/libraries/Wire/src",
+                "C:/Users/chrap/.platformio/packages/framework-arduino-avr/libraries/SPI/src",
+                "C:/Users/chrap/.platformio/packages/framework-arduino-avr/cores/arduino",
+                "C:/Users/chrap/.platformio/packages/framework-arduino-avr/variants/mega",
+                "C:/Users/chrap/.platformio/packages/framework-arduino-avr/libraries/EEPROM/src",
+                "C:/Users/chrap/.platformio/packages/framework-arduino-avr/libraries/HID/src",
+                "C:/Users/chrap/.platformio/packages/tool-unity",
+                ""
+            ],
+            "browse": {
+                "limitSymbolsToIncludedHeaders": true,
+                "path": [
+                    "C:/Dev/source/platformIO/projects/HomeHydroponics/include",
+                    "C:/Dev/source/platformIO/projects/HomeHydroponics/src",
+                    "C:/Users/chrap/.platformio/packages/framework-arduino-avr/libraries/SoftwareSerial/src",
+                    "C:/Dev/source/platformIO/projects/HomeHydroponics/lib/msgModbus",
+                    "C:/Dev/source/platformIO/projects/HomeHydroponics/.pio/libdeps/megaatmega2560/arduinounit/src",
+                    "C:/Dev/source/platformIO/projects/HomeHydroponics/.pio/libdeps/megaatmega2560/Webduino",
+                    "C:/Dev/source/platformIO/projects/HomeHydroponics/.pio/libdeps/megaatmega2560/Ethernet/src",
+                    "C:/Dev/source/platformIO/projects/HomeHydroponics/.pio/libdeps/megaatmega2560/Modbus-Master-Slave",
+                    "C:/Users/chrap/.platformio/packages/framework-arduino-avr/libraries/Wire/src",
+                    "C:/Users/chrap/.platformio/packages/framework-arduino-avr/libraries/SPI/src",
+                    "C:/Users/chrap/.platformio/packages/framework-arduino-avr/cores/arduino",
+                    "C:/Users/chrap/.platformio/packages/framework-arduino-avr/variants/mega",
+                    "C:/Users/chrap/.platformio/packages/framework-arduino-avr/libraries/EEPROM/src",
+                    "C:/Users/chrap/.platformio/packages/framework-arduino-avr/libraries/HID/src",
+                    "C:/Users/chrap/.platformio/packages/tool-unity",
+                    ""
+                ]
+            },
+            "defines": [
+                "PLATFORMIO=50200",
+                "ARDUINO_AVR_MEGA2560",
+                "PROCESS_MODBUS",
+                "F_CPU=16000000L",
+                "ARDUINO_ARCH_AVR",
+                "ARDUINO=10808",
+                "__AVR_ATmega2560__",
+                ""
+            ],
+            "cStandard": "c11",
+            "cppStandard": "c++11",
+            "compilerPath": "C:/Users/chrap/.platformio/packages/toolchain-atmelavr/bin/avr-gcc.exe",
+            "compilerArgs": [
+                "-mmcu=atmega2560",
+                ""
+            ]
+        }
+    ],
+    "version": 4
+}
