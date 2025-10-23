@@ -9,3 +9,6 @@ lib/IOLib
 *.o
 *.obj
 *.hex
+
+.vscode
+.pio
