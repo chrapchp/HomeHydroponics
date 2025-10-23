@@ -1,0 +1,20 @@
+adafruit/DHT sensor library @ ^1.4.2
+SPI
+Streaming=https://github.com/janelia-arduino/Streaming
+https://github.com/hideakitai/DebugLog.git
+Timezone=https://github.com/JChristensen/Timezone
+Time=https://github.com/PaulStoffregen/Time
+knolleary/PubSubClient@^2.8
+adafruit/Adafruit Unified Sensor @ ^1.1.4
+paulstoffregen/TimeAlarms @ 0.0.0-alpha+sha.c291c1ddad
+robtillaart/RunningMedian @ ^0.3.3
+DS3232RTC=https://github.com/JChristensen/DS3232RTC
+Ethernet=https://github.com/arduino-libraries/Ethernet.git
+home-assistant-integration
+dallasTemperature=https://github.com/milesburton/Arduino-Temperature-Control-Library
+https://github.com/chrapchp/IOLib.git
+Wire
+teckel12/NewPing @ ^1.9.1
+onewire=https://github.com/PaulStoffregen/OneWire
+bblanchon/ArduinoJson@^6.19
+arduinounit=https://github.com/mmurdoch/arduinounit.git

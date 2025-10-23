@@ -1,5 +1,5 @@
 /**
- * @file        plantModbus.h
+ * @file        hydroponics.h
  * @version     0.1
  * @date        2022Mar18
  * @author      pjc
@@ -26,16 +26,18 @@ byte defaultMAC[] = {DEFAULT_MAC_ADDRESS};
 
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <ArduinoHA.h>
 
 #define DEFAULT_MQTT_ADDRESS 192, 168, 1, 81
 IPAddress defaultMQTT(DEFAULT_MQTT_ADDRESS);
 
-#define MQTT_CONNECT_CHECK_RATE 5000
+#define PUBLISH_INTERVAL 5000 // 5 seconds
 #define MQTT_MSG_IN_SZ 300
 #define MQTT_STORE_SZ 550
 #define MQTT_TX_SZ 500
-EthernetClient ethernetClient;
-PubSubClient mqttClient;
+
+
+
 
 // char mqttMsgOut[200];
 
@@ -46,6 +48,7 @@ const char mqttStatusSendTopic[] = "Home/Hydroponic/Controller/Status";
 const char hostCommandTopic[] = "Home/Hydroponic/Controller/HostCommand";
 const char deviceID[] = "Controller001";
 const char connectedMsg[] = "Connected";
+
 
 boolean mqttReconnect();
 void initIOData();
@@ -72,8 +75,8 @@ void setSeedingLightHOA(uint32_t aState);
 void setGrowingChamberLightHOA(uint32_t aState);
 void setHeatingPadHOA(uint32_t aState);
 void setBoardTime(uint32_t anEpoch);
-void doPHCalibration(uint32_t mode);
-void doECCalibration(uint32_t mode);
+void doPHCalibration(int8_t mode);
+void doECCalibration(int8_t mode);
 
 #define FAULT_HDLR 0
 #define PY_001_OFP_SP_HDLR 1
@@ -96,30 +99,13 @@ void doECCalibration(uint32_t mode);
 #define PH_CAL_HDLR 17
 #define EC_CAL_HDLR 18
 
-void (*setHandlers[])(uint32_t arg) = {
-    NULL,
-    setCirculationPumpOffDuration, setCirculationPumpOnDuration,
-    setFanOffDuration, setFanOnDuration,
-    setHeatingPadOffTime, setHeatingPadOnTime,
-    setGrowingChamberLightsOffTime, setGrowingChamberLightsOnTime,
-    setSeedingAreaLightsOffTime, setSeedingAreaLightsOnTime,
-    setCirculationPumpHOA,
-    setGrowingChamberFanHOA,
-    setSeedingLightHOA,
-    setGrowingChamberLightHOA,
-    setHeatingPadHOA,
-    setBoardTime,
-    doPHCalibration,
-    doECCalibration
-
-};
 
 const int CALIBRATE_HIGH = 1;
 const int CALIBRATE_MID = 2;
 const int CALIBRATE_LOW = 3;
 const int CALIBRATE_CLEAR = 4;
 const int CALIBRATE_STATUS = 5;
-const int CALIBRATE_DRY = 6;
+const int CALIBRATE_DRY = 2;
 
 // setHandlers[0] = setCirculationPumpOnDuration;
 
@@ -156,8 +142,8 @@ const int CALIBRATE_DRY = 6;
 
 // } HostCommandEntry;
 
-#define isNaanModbus(x)   \
-  if (isnan(x))           \
-    bfconvert.val = -127; \
-  else                    \
-    bfconvert.val = x;
+// #define isNaanModbus(x)   \
+//   if (isnan(x))           \
+//     bfconvert.val = -127; \
+//   else                    \
+//     bfconvert.val = x;

@@ -3,3 +3,9 @@
 .clang_complete
 .gcc-flags.json
 lib/IOLib
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+*.hex

@@ -1,0 +1,195 @@
+onCirculationPumpDurationCommand# homeassistant:
+#   customize:
+#     sensor.phCalHigh:
+#       friendly_name: "pH Cal High Time"
+#       icon: mdi:clock
+#     sensor.phCalMid:
+#       friendly_name: "pH Cal Mid Time"
+#       icon: mdi:clock
+#     sensor.phCalLow:
+#       friendly_name: "pH Cal Low Time"
+#       icon: mdi:clock
+# sensor.ecCalDry:
+#   friendly_name: "EC Cal Dry Time"
+#   icon: mdi:clock
+# sensor.ecCalHigh:
+#   friendly_name: "EC Cal High Time"
+#   icon: mdi:clock
+# sensor.ecCalLow:
+#   friendly_name: "EC Cal Low Time"
+#   icon: mdi:clock
+
+mqtt:
+  - sensor:
+      - name: "pH Cal High Raw"
+        icon: "mdi:calendar-clock"
+        unique_id: phCalHigh_raw
+        state_topic: "aha/deadbe0001fc/batch/state"
+        value_template: "{{ as_datetime(value_json.phCalHigh).astimezone().strftime('%b %d %Y, %H:%M') }}"
+      - name: "pH Cal Mid Raw"
+        icon: "mdi:calendar-clock"
+        unique_id: phCalMid_raw
+        state_topic: "aha/deadbe0001fc/batch/state"
+        value_template: "{{ as_datetime(value_json.phCalMid).astimezone().strftime('%b %d %Y, %H:%M') }}"
+      - name: "pH Cal Low Raw"
+        icon: "mdi:calendar-clock"
+        unique_id: phCalLow_raw
+        state_topic: "aha/deadbe0001fc/batch/state"
+        value_template: "{{ as_datetime(value_json.phCalLow).astimezone().strftime('%b %d %Y, %H:%M') }}"
+      - name: "EC Cal Dry Raw"
+        icon: "mdi:calendar-clock"
+        unique_id: ecCalDry_raw
+        state_topic: "aha/deadbe0001fc/batch/state"
+        value_template: "{{ as_datetime(value_json.ecCalDry).astimezone().strftime('%b %d %Y, %H:%M') }}"
+      - name: "EC Cal High Raw"
+        icon: "mdi:calendar-clock"
+        unique_id: ecCalHigh_raw
+        state_topic: "aha/deadbe0001fc/batch/state"
+        value_template: "{{ as_datetime(value_json.ecCalHigh).astimezone().strftime('%b %d %Y, %H:%M') }}"
+      - name: "EC Cal Low Raw"
+        icon: "mdi:calendar-clock"
+        unique_id: ecCalLow_raw
+        state_topic: "aha/deadbe0001fc/batch/state"
+        value_template: "{{ as_datetime(value_json.ecCalLow).astimezone().strftime('%b %d %Y, %H:%M') }}"
+      - name: "RTC Now Raw"
+        icon: "mdi:calendar-clock"
+        unique_id: rtcnow_raw
+        state_topic: "aha/deadbe0001fc/batch/state"
+        value_template: "{{ as_datetime(value_json.RTCNow).astimezone().strftime('%b %d %Y, %H:%M') }}"
+
+input_datetime:
+  hydroponic_gc_on_setpoint:
+    name: GC On Time
+    has_date: false
+    has_time: true
+  hydroponic_gc_off_setpoint:
+    name: GC Off Time
+    has_date: false
+    has_time: true
+  hydroponic_sa_led_on_setpoint:
+    name: SA LED On Time
+    has_date: false
+    has_time: true
+  hydroponic_sa_led_off_setpoint:
+    name: SA LED Off Time
+    has_date: false
+    has_time: true
+  hydroponic_sa_hp_on_setpoint:
+    name: SA HP On Time
+    has_date: false
+    has_time: true
+  hydroponic_sa_hp_off_setpoint:
+    name: SA HP Off Time
+    has_date: false
+    has_time: true
+  hydroponic_rtc_setpoint:
+    name: RTC Time
+    has_date: false
+    has_time: true
+automation:
+  - alias: GC On time to Epoch
+    trigger:
+      - platform: state
+        entity_id: input_datetime.hydroponic_gc_on_setpoint
+    action:
+      - service: script.send_time_to_mqtt
+        data:
+          input_entity: input_datetime.hydroponic_gc_on_setpoint
+          mqtt_topic: "aha/deadbe0001fc/growingChamberLEDOnTime/cmd_t"
+  - alias: GC Off time to Epoch
+    trigger:
+      - platform: state
+        entity_id: input_datetime.hydroponic_gc_off_setpoint
+    action:
+      - service: script.send_time_to_mqtt
+        data:
+          input_entity: input_datetime.hydroponic_gc_off_setpoint
+          mqtt_topic: "aha/deadbe0001fc/growingChamberLEDOffTime/cmd_t"
+  - alias: SA LED On time to Epoch
+    trigger:
+      - platform: state
+        entity_id: input_datetime.hydroponic_sa_led_on_setpoint
+    action:
+      - service: script.send_time_to_mqtt
+        data:
+          input_entity: input_datetime.hydroponic_sa_led_on_setpoint
+          mqtt_topic: "aha/deadbe0001fc/seedingAreaLEDOnTime/cmd_t"
+  - alias: SA LED Off time to Epoch
+    trigger:
+      - platform: state
+        entity_id: input_datetime.hydroponic_sa_led_off_setpoint
+    action:
+      - service: script.send_time_to_mqtt
+        data:
+          input_entity: input_datetime.hydroponic_sa_led_off_setpoint
+          mqtt_topic: "aha/deadbe0001fc/seedingAreaLEDOffTime/cmd_t"
+  - alias: SA HP On time to Epoch
+    trigger:
+      - platform: state
+        entity_id: input_datetime.hydroponic_sa_hp_on_setpoint
+    action:
+      - service: script.send_time_to_mqtt
+        data:
+          input_entity: input_datetime.hydroponic_sa_hp_on_setpoint
+          mqtt_topic: "aha/deadbe0001fc/seedingAreaPadOnTime/cmd_t"
+  - alias: SA HP Off time to Epoch
+    trigger:
+      - platform: state
+        entity_id: input_datetime.hydroponic_sa_hp_off_setpoint
+    action:
+      - service: script.send_time_to_mqtt
+        data:
+          input_entity: input_datetime.hydroponic_sa_hp_off_setpoint
+          mqtt_topic: "aha/deadbe0001fc/seedingAreaPadOffTime/cmd_t"
+  - alias: RTC SP to Epoch
+    trigger:
+      - platform: state
+        entity_id: input_datetime.hydroponic_rtc_setpoint
+    action:
+      - service: script.send_time_to_mqtt
+        data:
+          input_entity: input_datetime.hydroponic_rtc_setpoint
+          mqtt_topic: "aha/deadbe0001fc/rtcTime/cmd_t"
+script:
+  send_time_to_mqtt:
+    alias: Send Time to MQTT
+    description: Publishes a Unix epoch timestamp to an MQTT topic based on an input_datetime entity
+    fields:
+      input_entity:
+        description: The entity ID of the input_datetime (e.g., input_datetime.my_time)
+        example: input_datetime.my_time
+      mqtt_topic:
+        description: The MQTT command topic to publish to
+        example: homeassistant/switch/my_device/set
+    sequence:
+      - condition: template
+        value_template: "{{ states(input_entity) != 'unknown' }}"
+      - service: mqtt.publish
+        data:
+          topic: "{{ mqtt_topic }}"
+          payload: >
+            {% set time_str = states(input_entity) %}
+            {% if time_str != 'unknown' %}
+              {% set time_obj = strptime(time_str, '%H:%M:%S') %}
+              {% set today = now().replace(hour=time_obj.hour, minute=time_obj.minute, second=0, microsecond=0) %}
+              {{ today.timestamp() | int }}
+            {% else %}
+              0
+            {% endif %}
+
+  update_datetime_from_epoch:
+    alias: "Update input_datetime from Unix epoch"
+    description: "Converts Unix epoch to HH:MM and sets input_datetime"
+    fields:
+      epoch_value:
+        description: "Unix epoch timestamp in seconds"
+        example: "1695063000"
+      target_entity:
+        description: "Target input_datetime entity ID"
+        example: "input_datetime.target_time"
+    sequence:
+      - service: input_datetime.set_datetime
+        target:
+          entity_id: "{{ target_entity }}"
+        data:
+          time: "{{ as_datetime(value_json.ecCalLow).astimezone().strftime('%H:%M') }}"
