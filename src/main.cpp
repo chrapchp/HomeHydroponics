@@ -362,19 +362,7 @@ DallasTemperature sensors(&oneWire);
 
 // Analog Inputs
 //
-// NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE);
-#define NUTRIENT_TANK_HEIGHT 45    // height of nutrient tank in cm
-#define NUTRIENT_TANK_AIR_GAP 16.5 // space between sensor and max water level in cm
-#define NUTRIENT_DEAD_BAND 5.0     // % change allowed between samples as sensor  bounces because of noise issue
-// volume 28.5 * 76.2 * 45.75 => 100 L volume peroxyde ration 3 ml per 3.8 L
-const float NUTRIENT_TANK_MIXTURE_MAX = NUTRIENT_TANK_HEIGHT -
-                                        NUTRIENT_TANK_AIR_GAP;
 
-#if defined(NO_PING)
-NewPing LT_002(15, 16, NUTRIENT_TANK_HEIGHT); // Water Level
-float LT_002Raw = 0.0;
-RunningMedian LT_002MedianFilter = RunningMedian(5);
-#endif // if defined(NO_PING)
 
 // from top,  0-> undefined Water Level present value in cm
 
@@ -484,6 +472,8 @@ DA_NonBlockingDelay KI_003 = DA_NonBlockingDelay(TEMPERATURE_COMPENSATE_CYCLE,
 DA_NonBlockingDelay idlTmr = DA_NonBlockingDelay(PUBLISH_INTERVAL,
                                                  onIdle);
 
+
+DS3232RTC RTC;                                                 
 void onMQTTMessage(const char *topic, const uint8_t *payload, uint16_t length)
 {
 
@@ -1104,6 +1094,7 @@ void on_SeedingAreaLED_Process(int8_t state)
 
 void setupRTC()
 {
+  RTC.begin();
   setSyncProvider([]()
                   { return RTC.get(); });
 
